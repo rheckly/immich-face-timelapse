@@ -25,6 +25,7 @@ export const API = {
   output: '/api/output',
   config: '/api/config',
   configDefaults: '/api/config/defaults',
+  music: '/api/music',
   ws: '/api/ws',
 };
 

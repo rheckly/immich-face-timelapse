@@ -7,10 +7,12 @@
 //! - `processing`: Job control (progress, start, cancel)
 //! - `output`: Output folder and image management
 //! - `config`: Configuration get/update
+//! - `music`: Music tracks available for the video
 
 mod albums;
 mod config;
 mod health;
+mod music;
 mod output;
 mod people;
 mod processing;
@@ -32,6 +34,7 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use albums::{get_album_thumbnail, get_albums};
 use config::{get_config, get_config_defaults, update_config};
 use health::{check_connection, health_check};
+use music::list_music_tracks;
 use output::{
     cleanup_all_output, cleanup_output_folder, compile_folder_video, delete_images_bulk,
     delete_single_image, list_folder_images, list_output_folders,
@@ -44,6 +47,7 @@ use ws::ws_handler;
 pub use albums::AlbumInfo;
 pub use config::ConfigResponse;
 pub use health::ConnectionStatus;
+pub use music::MusicListResponse;
 pub use output::{BulkDeleteResponse, FolderImagesResponse, ImageInfo, OutputFolderInfo};
 pub use people::{AssetCountResponse, PersonInfo};
 pub use processing::{ProgressResponse, SkipStatsResponse};
@@ -105,6 +109,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/config", get(get_config))
         .route("/api/config", put(update_config))
         .route("/api/config/defaults", get(get_config_defaults))
+        .route("/api/music", get(list_music_tracks))
         // Serve output files (video, images) — no-cache so browsers revalidate
         // after reprocessing (filenames stay the same across runs)
         .nest_service(

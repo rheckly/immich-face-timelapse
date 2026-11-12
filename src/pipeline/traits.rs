@@ -263,6 +263,8 @@ impl PipelineContext {
 /// - **Validators**: Skip the image if a condition fails (return `StepOutcome::Skip`)
 /// - **Transformers**: Modify the image (update `ctx.image`)
 /// - **Computers**: Calculate values for later steps (update `ctx.computed`)
+// `async_trait` adds its own #[must_use] to the generated futures.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait ProcessingStep: Send + Sync {
     /// Unique identifier for this step (used in skip stats and debug output).

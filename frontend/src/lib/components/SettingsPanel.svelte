@@ -18,6 +18,55 @@
 
   let config = $state(null);
 
+  // Music tracks available in the mounted music folder
+  let music = $state({ music_dir: '', available: false, tracks: [] });
+  let musicLoading = $state(false);
+
+  async function loadMusic() {
+    musicLoading = true;
+    try {
+      const res = await fetch(API.music);
+      if (!res.ok) throw res;
+      music = await res.json();
+    } catch (e) {
+      error = await handleError('Failed to load music', e);
+    } finally {
+      musicLoading = false;
+    }
+  }
+
+  function toggleTrack(name) {
+    const tracks = config.video.music_tracks ?? [];
+    config.video.music_tracks = tracks.includes(name)
+      ? tracks.filter((t) => t !== name)
+      : [...tracks, name];
+  }
+
+  function removeMissingTracks() {
+    config.video.music_tracks = (config.video.music_tracks ?? []).filter(
+      (t) => !missingTracks.includes(t)
+    );
+  }
+
+  function formatDuration(secs) {
+    if (secs == null) return '?';
+    const s = Math.round(secs);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  // Total length of the selected music (only tracks that still exist)
+  let selectedMusicSecs = $derived(
+    (config?.video?.music_tracks ?? []).reduce((sum, name) => {
+      const t = music.tracks.find((x) => x.name === name);
+      return sum + (t?.duration_secs ?? 0);
+    }, 0)
+  );
+  let missingTracks = $derived(
+    music.available
+      ? (config?.video?.music_tracks ?? []).filter((name) => !music.tracks.some((t) => t.name === name))
+      : []
+  );
+
   async function loadConfig() {
     loading = true;
     error = null;
@@ -93,6 +142,11 @@
           framerate: Number(config.video.framerate),
           codec: config.video.codec,
           crf: Number(config.video.crf),
+          music_tracks: config.video.music_tracks ?? [],
+          music_fade_out_secs: Number(config.video.music_fade_out_secs),
+          fit_to_music: config.video.fit_to_music,
+          min_framerate: Number(config.video.min_framerate),
+          max_framerate: Math.max(Number(config.video.min_framerate), Number(config.video.max_framerate)),
         },
       };
 
@@ -128,6 +182,7 @@
 
   onMount(() => {
     loadConfig();
+    loadMusic();
   });
 </script>
 
@@ -627,6 +682,120 @@
                 </label>
                 <input id="video-enabled" type="checkbox" bind:checked={config.video.enabled} />
               </div>
+
+              <div class="setting-section">
+                <div class="section-header">
+                  <span class="section-title">Music</span>
+                  <button type="button" class="reset-btn small-btn" onclick={loadMusic} disabled={musicLoading}>
+                    {musicLoading ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+                <span class="section-hint">
+                  Tracks from the mounted music folder. Selected tracks play in the numbered order and fade out at
+                  the end of the video.
+                </span>
+
+                {#if !music.available}
+                  <p class="music-empty">Music folder not found. Mount a folder at <code>/app/music</code>.</p>
+                {:else if music.tracks.length === 0}
+                  <p class="music-empty">No audio files (mp3, m4a, aac, wav, flac, ogg, opus) in the music folder.</p>
+                {:else}
+                  <ul class="music-list">
+                    {#each music.tracks as track (track.name)}
+                      {@const order = (config.video.music_tracks ?? []).indexOf(track.name)}
+                      <li>
+                        <label class="music-track" class:selected={order >= 0}>
+                          <input type="checkbox" checked={order >= 0} onchange={() => toggleTrack(track.name)} />
+                          <span class="music-order">{order >= 0 ? order + 1 : ''}</span>
+                          <span class="music-name">{track.name}</span>
+                          <span class="music-duration">{formatDuration(track.duration_secs)}</span>
+                        </label>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+
+                {#if missingTracks.length > 0}
+                  <p class="music-warning">
+                    Selected but missing: {missingTracks.join(', ')}
+                    <button type="button" class="reset-btn small-btn" onclick={removeMissingTracks}>Remove</button>
+                  </p>
+                {/if}
+
+                {#if (config.video.music_tracks ?? []).length > 0}
+                  <p class="music-empty">Selected music length: {formatDuration(selectedMusicSecs)}</p>
+                {/if}
+
+                <div class="setting-row">
+                  <label for="video-fade">
+                    <span class="setting-label">Fade-out</span>
+                    <span class="setting-hint">Music fade-out at the end of the video</span>
+                  </label>
+                  <div class="setting-control">
+                    <input
+                      id="video-fade"
+                      type="range"
+                      bind:value={config.video.music_fade_out_secs}
+                      min="0"
+                      max="15"
+                      step="0.5"
+                    />
+                    <span class="value">{Number(config.video.music_fade_out_secs).toFixed(1)} s</span>
+                  </div>
+                </div>
+
+                <div class="setting-row checkbox-row">
+                  <label for="video-fit">
+                    <span class="setting-label">Fit video to music</span>
+                    <span class="setting-hint">
+                      Framerate = number of images ÷ music length, limited to the range below. Replaces the fixed
+                      framerate when music is selected.
+                    </span>
+                  </label>
+                  <input id="video-fit" type="checkbox" bind:checked={config.video.fit_to_music} />
+                </div>
+
+                {#if config.video.fit_to_music}
+                  <div class="setting-row">
+                    <label for="video-min-fps">
+                      <span class="setting-label">Minimum framerate</span>
+                      <span class="setting-hint">If the fit would be slower, the video ends before the music</span>
+                    </label>
+                    <div class="setting-control">
+                      <input
+                        id="video-min-fps"
+                        type="range"
+                        bind:value={config.video.min_framerate}
+                        min="1"
+                        max="60"
+                        step="0.5"
+                      />
+                      <span class="value">{Number(config.video.min_framerate).toFixed(1)} fps</span>
+                    </div>
+                  </div>
+
+                  <div class="setting-row">
+                    <label for="video-max-fps">
+                      <span class="setting-label">Maximum framerate</span>
+                      <span class="setting-hint">If the fit would be faster, the video runs longer than the music</span>
+                    </label>
+                    <div class="setting-control">
+                      <input
+                        id="video-max-fps"
+                        type="range"
+                        bind:value={config.video.max_framerate}
+                        min="1"
+                        max="120"
+                        step="0.5"
+                      />
+                      <span class="value">{Number(config.video.max_framerate).toFixed(1)} fps</span>
+                    </div>
+                  </div>
+                  {#if Number(config.video.min_framerate) > Number(config.video.max_framerate)}
+                    <p class="music-warning">Minimum is above maximum; the maximum will be raised on save.</p>
+                  {/if}
+                {/if}
+              </div>
             </fieldset>
           {/if}
         </div>
@@ -648,6 +817,65 @@
 </div>
 
 <style>
+  .small-btn {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .music-list {
+    list-style: none;
+    margin: 0.5rem 0;
+    padding: 0;
+    max-height: 16rem;
+    overflow-y: auto;
+  }
+
+  .music-track {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .music-track:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .music-track.selected {
+    background: rgba(66, 133, 244, 0.12);
+  }
+
+  .music-order {
+    min-width: 1.2rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .music-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .music-duration {
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .music-empty,
+  .music-warning {
+    margin: 0.5rem 0;
+    font-size: 0.85rem;
+    opacity: 0.8;
+  }
+
+  .music-warning {
+    color: #f0b429;
+  }
+
   .settings-panel {
     background: #1a1a1a;
     border-radius: 8px;

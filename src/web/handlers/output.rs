@@ -481,6 +481,7 @@ pub async fn compile_folder_video(
 
     // Clone values needed for the async task
     let video_config = config.video.clone();
+    let music_dir = config.music_dir.clone();
     let video_filename = format!("{}.mp4", folder_name);
     let output_path = folder_path.join(&video_filename);
     let job_state = state.clone();
@@ -492,6 +493,7 @@ pub async fn compile_folder_video(
             &images_dir,
             &output_path,
             &video_config,
+            &music_dir,
             Some(&cancel_token),
             |current, total| {
                 // Check for cancellation

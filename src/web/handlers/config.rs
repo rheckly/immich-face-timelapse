@@ -5,7 +5,7 @@ use crate::config::{
     FaceResolutionConfig, HeadPoseConfig, OutputConfig, ProcessingConfig, TimeIntervalConfig,
     TimestampConfig, VideoConfig, CONFIG_PATH,
 };
-use crate::web::state::AppState;
+use crate::web::state::{validate_path_component, AppState};
 use axum::{extract::State, http::StatusCode, response::Json};
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +67,11 @@ pub struct VideoConfigUpdate {
     pub framerate: Option<u32>,
     pub codec: Option<String>,
     pub crf: Option<u32>,
+    pub music_tracks: Option<Vec<String>>,
+    pub music_fade_out_secs: Option<f32>,
+    pub fit_to_music: Option<bool>,
+    pub min_framerate: Option<f32>,
+    pub max_framerate: Option<f32>,
 }
 
 /// Validation error with field name and message.
@@ -231,6 +236,37 @@ fn validate_video_config(vid: &VideoConfigUpdate) -> Result<(), ValidationError>
             ));
         }
     }
+    if let Some(v) = vid.music_fade_out_secs {
+        if !(0.0..=30.0).contains(&v) {
+            return Err(ValidationError::new(
+                "video.music_fade_out_secs",
+                format!("must be between 0 and 30, got {}", v),
+            ));
+        }
+    }
+    for (field, value) in [
+        ("video.min_framerate", vid.min_framerate),
+        ("video.max_framerate", vid.max_framerate),
+    ] {
+        if let Some(v) = value {
+            if v.is_nan() || v <= 0.0 || v > 120.0 {
+                return Err(ValidationError::new(
+                    field,
+                    format!("must be between 0 (exclusive) and 120, got {}", v),
+                ));
+            }
+        }
+    }
+    if let Some(ref tracks) = vid.music_tracks {
+        for t in tracks {
+            if t.is_empty() || validate_path_component(t, "music track").is_err() {
+                return Err(ValidationError::new(
+                    "video.music_tracks",
+                    format!("invalid track name '{}'", t),
+                ));
+            }
+        }
+    }
     if let Some(ref v) = vid.codec {
         let valid_codecs = ["libx264", "libx265", "libvpx", "libvpx-vp9", "libaom-av1"];
         if !valid_codecs.contains(&v.as_str()) {
@@ -274,6 +310,19 @@ pub async fn update_config(
     // Update config in-memory, then save outside the lock
     let config_snapshot = {
         let mut config = state.config.write().await;
+
+        // Keep min <= max even when only one bound is sent (checked before any change)
+        if let Some(ref vid) = update.video {
+            let min = vid.min_framerate.unwrap_or(config.video.min_framerate);
+            let max = vid.max_framerate.unwrap_or(config.video.max_framerate);
+            if min > max {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "Invalid video.min_framerate: must not be greater than max_framerate"
+                        .to_string(),
+                ));
+            }
+        }
 
         if let Some(proc) = update.processing {
             if let Some(v) = proc.max_workers {
@@ -326,6 +375,21 @@ pub async fn update_config(
             }
             if let Some(v) = vid.crf {
                 config.video.crf = v;
+            }
+            if let Some(v) = vid.music_tracks {
+                config.video.music_tracks = v;
+            }
+            if let Some(v) = vid.music_fade_out_secs {
+                config.video.music_fade_out_secs = v;
+            }
+            if let Some(v) = vid.fit_to_music {
+                config.video.fit_to_music = v;
+            }
+            if let Some(v) = vid.min_framerate {
+                config.video.min_framerate = v;
+            }
+            if let Some(v) = vid.max_framerate {
+                config.video.max_framerate = v;
             }
         }
 

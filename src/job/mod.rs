@@ -502,6 +502,7 @@ async fn run_job_inner(
             &output_dirs.images,
             &output_dirs.video,
             &config.video,
+            &config.music_dir,
             Some(&cancel_token),
             |frame, total| {
                 // Sync callback - just log progress. State updates would require

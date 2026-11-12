@@ -66,6 +66,7 @@ services:
     volumes:
       - ./config:/app/config
       - ./output:/app/output
+      - ./music:/app/music:ro   # optional: background music
     restart: unless-stopped
 ```
 
@@ -79,6 +80,7 @@ docker run -d \
   -e IMMICH_BASE_URL=http://your_server:2283 \
   -v ./config:/app/config \
   -v ./output:/app/output \
+  -v ./music:/app/music:ro \
   arnaudcayrol/immich-selfie-timelapse
 ```
 
@@ -96,6 +98,22 @@ chown -R 1000:1000 ./config ./output
 |---|---|
 | `/app/config` | Persisted configuration file (`config.toml`) |
 | `/app/output` | Processed images and compiled timelapse video |
+| `/app/music` | *(optional, read-only is fine)* Music files (mp3, m4a, aac, wav, flac, ogg, opus) to mix into the video |
+
+### Music
+
+Mount a folder with audio files at `/app/music` (or set `MUSIC_DIR` to another path). In **Settings → Video** you can:
+
+- select one or more tracks; they play one after another in the numbered order (click order),
+- set the fade-out length at the end of the video,
+- enable **Fit video to music**: framerate = number of images ÷ total music length, limited to a configurable
+  minimum and maximum framerate. If the limit kicks in, the video ends before the music (minimum) or runs
+  longer than the music (maximum); the music is always cut and faded out at whichever ends first.
+
+### Fork image (GHCR)
+
+This fork publishes a multi-arch image to `ghcr.io/rheckly/immich-automated-selfie-timelapse` on every push to
+`happy-pc` (tags: `latest`, branch name, short SHA). Only the last 3 versions are kept.
 
 ### Settings
 

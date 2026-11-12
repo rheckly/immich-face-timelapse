@@ -31,6 +31,10 @@ pub struct Config {
 
     /// Output directory for processed images and video.
     pub output_dir: PathBuf,
+
+    /// Directory containing music files that can be mixed into the video
+    /// (mounted at `/app/music` in Docker). Overridable via `MUSIC_DIR`.
+    pub music_dir: PathBuf,
 }
 
 impl Default for Config {
@@ -40,6 +44,7 @@ impl Default for Config {
             processing: ProcessingConfig::default(),
             video: VideoConfig::default(),
             output_dir: PathBuf::from("output"),
+            music_dir: PathBuf::from("music"),
         }
     }
 }
@@ -644,6 +649,23 @@ pub struct VideoConfig {
 
     /// Constant Rate Factor for quality (0-51, lower = better, 18-28 recommended).
     pub crf: u32,
+
+    /// Music tracks (file names inside the music directory) mixed into the
+    /// video, played one after another in this order. Empty = no audio.
+    pub music_tracks: Vec<String>,
+
+    /// Length of the audio fade-out at the end of the video, in seconds.
+    pub music_fade_out_secs: f32,
+
+    /// Fit the video to the music: framerate = image count / music length,
+    /// clamped to `[min_framerate, max_framerate]`. Ignored without music.
+    pub fit_to_music: bool,
+
+    /// Lowest framerate allowed when fitting the video to the music.
+    pub min_framerate: f32,
+
+    /// Highest framerate allowed when fitting the video to the music.
+    pub max_framerate: f32,
 }
 
 impl Default for VideoConfig {
@@ -653,6 +675,11 @@ impl Default for VideoConfig {
             framerate: 20,
             codec: "libx264".to_string(),
             crf: 23,
+            music_tracks: Vec::new(),
+            music_fade_out_secs: 3.0,
+            fit_to_music: false,
+            min_framerate: 5.0,
+            max_framerate: 30.0,
         }
     }
 }
@@ -684,6 +711,34 @@ impl VideoConfig {
                 VALID_CODECS.join(", "),
                 self.codec
             )));
+        }
+        if !(0.0..=30.0).contains(&self.music_fade_out_secs) {
+            return Err(Error::Config(
+                "Music fade-out must be between 0 and 30 seconds".to_string(),
+            ));
+        }
+        let fps_ok = |v: f32| v > 0.0 && v <= 120.0;
+        if !fps_ok(self.min_framerate) || !fps_ok(self.max_framerate) {
+            return Err(Error::Config(
+                "Min/max framerate must be between 0 (exclusive) and 120".to_string(),
+            ));
+        }
+        if self.min_framerate > self.max_framerate {
+            return Err(Error::Config(
+                "Min framerate must not be greater than max framerate".to_string(),
+            ));
+        }
+        for track in &self.music_tracks {
+            if track.is_empty()
+                || track.contains("..")
+                || track.contains('/')
+                || track.contains('\\')
+            {
+                return Err(Error::Config(format!(
+                    "Invalid music track name '{}'",
+                    track
+                )));
+            }
         }
         Ok(())
     }
@@ -740,6 +795,11 @@ impl Config {
         }
         if let Ok(url) = std::env::var("IMMICH_BASE_URL") {
             self.api.base_url = url;
+        }
+        if let Ok(dir) = std::env::var("MUSIC_DIR") {
+            if !dir.is_empty() {
+                self.music_dir = PathBuf::from(dir);
+            }
         }
         self
     }
@@ -865,6 +925,19 @@ mod tests {
         config.crf = 23;
         config.framerate = 0;
         assert!(config.validate().is_err());
+
+        // Min framerate above max framerate
+        config.framerate = 20;
+        config.min_framerate = 40.0;
+        config.max_framerate = 30.0;
+        assert!(config.validate().is_err());
+
+        // Path traversal in music track name
+        config.min_framerate = 5.0;
+        config.music_tracks = vec!["../secret.mp3".to_string()];
+        assert!(config.validate().is_err());
+        config.music_tracks = vec!["song.mp3".to_string()];
+        assert!(config.validate().is_ok());
     }
 
     #[test]

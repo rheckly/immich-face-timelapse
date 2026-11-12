@@ -62,7 +62,7 @@ RUN mkdir -p models && \
 COPY --from=rust-build /app/target/release/immich-timelapse ./
 COPY --from=frontend-build /app/frontend/dist/ ./frontend/dist/
 
-RUN mkdir -p output config
+RUN mkdir -p output config music
 
 EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
