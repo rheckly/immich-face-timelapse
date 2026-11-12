@@ -33,7 +33,7 @@ use tower_http::set_header::SetResponseHeaderLayer;
 // Re-export handler functions for use in router
 use albums::{get_album_thumbnail, get_albums};
 use config::{get_config, get_config_defaults, update_config};
-use health::{check_connection, health_check};
+use health::{check_connection, health_check, version_info};
 use music::list_music_tracks;
 use output::{
     cleanup_all_output, cleanup_output_folder, compile_folder_video, delete_images_bulk,
@@ -46,7 +46,7 @@ use ws::ws_handler;
 // Re-export types that may be needed by other modules
 pub use albums::AlbumInfo;
 pub use config::ConfigResponse;
-pub use health::ConnectionStatus;
+pub use health::{ConnectionStatus, VersionInfo};
 pub use music::MusicListResponse;
 pub use output::{BulkDeleteResponse, FolderImagesResponse, ImageInfo, OutputFolderInfo};
 pub use people::{AssetCountResponse, PersonInfo};
@@ -71,6 +71,7 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         // API routes
         .route("/api/health", get(health_check))
+        .route("/api/version", get(version_info))
         .route("/api/connection", get(check_connection))
         .route("/api/people", get(get_people))
         .route(

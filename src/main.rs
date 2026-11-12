@@ -30,6 +30,14 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let build = web::VersionInfo::current();
+    tracing::info!(
+        "Immich Timelapse {} (commit {}, built {})",
+        build.version,
+        build.commit.unwrap_or("unknown"),
+        build.build_date.unwrap_or("unknown")
+    );
+
     // Load configuration
     let config = load_config()?;
     tracing::info!("Configuration loaded");

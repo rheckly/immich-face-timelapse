@@ -11,11 +11,15 @@ export const TIMING = {
 export const STORAGE_KEYS = {
   selectedPerson: 'immich-timelapse-selected-person',
   selectedAlbums: 'immich-timelapse-selected-albums',
+  view: 'immich-timelapse-view', // 'classic' | 'guided'
+  guidedClosedBoxes: 'immich-timelapse-guided-closed-boxes',
+  theme: 'immich-timelapse-theme', // 'light' | 'dark', read again in index.html before render
 };
 
 // ===== API Endpoints =====
 export const API = {
   health: '/api/health',
+  version: '/api/version',
   connection: '/api/connection',
   people: '/api/people',
   albums: '/api/albums',

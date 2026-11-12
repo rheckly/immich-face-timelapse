@@ -10,6 +10,37 @@ pub async fn health_check() -> &'static str {
     "OK"
 }
 
+/// Build information of the running server.
+///
+/// The values are baked in at compile time. The Docker build passes them as
+/// build args (see Dockerfile and .github/workflows/ghcr.yml); local builds
+/// fall back to the Cargo package version.
+#[derive(Serialize)]
+pub struct VersionInfo {
+    pub version: &'static str,
+    pub commit: Option<&'static str>,
+    pub build_date: Option<&'static str>,
+}
+
+fn non_empty(value: Option<&'static str>) -> Option<&'static str> {
+    value.filter(|v| !v.trim().is_empty())
+}
+
+impl VersionInfo {
+    pub fn current() -> Self {
+        Self {
+            version: non_empty(option_env!("APP_VERSION")).unwrap_or(env!("CARGO_PKG_VERSION")),
+            commit: non_empty(option_env!("GIT_SHA")),
+            build_date: non_empty(option_env!("BUILD_DATE")),
+        }
+    }
+}
+
+/// Version endpoint: which build is live.
+pub async fn version_info() -> Json<VersionInfo> {
+    Json(VersionInfo::current())
+}
+
 /// Connection status response.
 #[derive(Serialize)]
 pub struct ConnectionStatus {

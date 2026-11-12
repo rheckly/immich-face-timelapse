@@ -26,6 +26,13 @@ RUN mkdir src && \
     cargo build --release && \
     rm -rf src
 
+# Build info shown in the UI and at /api/version (declared after the
+# dependency cache so a new version doesn't rebuild all crates)
+ARG APP_VERSION=dev
+ARG GIT_SHA=
+ARG BUILD_DATE=
+ENV APP_VERSION=${APP_VERSION} GIT_SHA=${GIT_SHA} BUILD_DATE=${BUILD_DATE}
+
 # Build real binary
 COPY src/ src/
 RUN touch src/main.rs src/lib.rs && cargo build --release

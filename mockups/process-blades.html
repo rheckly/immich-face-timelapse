@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup B – Panels wie Mosaik · Immich Selfie Timelapse</title>
+<script>
+// Wie Mosaik: Theme vor dem Stil setzen, ohne eigene Wahl zählt die Systemeinstellung
+function applyTheme() {
+  const choice = localStorage.getItem("tlTheme");
+  const dark = choice === "dark" || (choice !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+}
+applyTheme();
+</script>
+<style>
+  /* ---------- Farben und Grundstil 1:1 aus Mosaik ---------- */
+  :root { color-scheme:light; --bg:#f4f4f2; --card:#fff; --text:#23272b; --muted:#667; --line:#dcdcd8; --accent:#2f6f8f; --on-accent:#fff; --err:#a4262c; }
+  :root[data-theme=dark] { color-scheme:dark; --bg:#17191b; --card:#222528; --text:#e8e8e6; --muted:#a0a4a8; --line:#3a3e42; --accent:#6db3d6; --on-accent:#111; --err:#ff8a8f; }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  body { margin:0; background:#555; color:var(--text); font:15px/1.45 system-ui,"Segoe UI",sans-serif; height:100vh; display:flex; flex-direction:column; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  label { display:block; margin:8px 0 3px; font-size:13px; color:var(--muted); }
+  label.check { display:flex; gap:7px; align-items:center; color:var(--text); }
+  input,select,button { font:inherit; color:inherit; }
+  input[type=number],input[type=text],input[type=date],select { width:100%; padding:6px 8px; background:var(--bg); border:1px solid var(--line); border-radius:5px; }
+  input[type=range] { width:100%; margin:0; }
+  @media (pointer:coarse) { input, select { font-size:16px !important; } }
+  button { padding:7px 13px; background:var(--bg); border:1px solid var(--line); border-radius:5px; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  .btnRow { display:flex; gap:8px; }
+  .btnRow > * { flex:1 1 0; min-width:0; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .hidden { display:none !important; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:14px; }
+
+  /* ---------- Mockup-Leiste (nicht Teil des Designs) ---------- */
+  .mock-bar { flex:none; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; padding:.45rem 1rem; background:#2b2410; color:#f5d27a; font-size:13px; }
+  .mock-bar b { margin-right:auto; }
+  .mock-bar a, .mock-bar button { padding:.25rem .7rem; border:1px solid #6b5a22; border-radius:6px; text-decoration:none; color:inherit; background:none; font-size:13px; }
+  .mock-bar .on { background:#f5d27a; color:#2b2410; }
+  .stage { flex:1; min-height:0; display:flex; justify-content:center; }
+  .stage.phone { padding:1.2rem 0; }
+  #device { position:relative; width:100%; height:100%; display:flex; flex-direction:column; background:var(--bg); overflow:hidden; container-type:inline-size; container-name:app; }
+  .stage.phone #device { width:390px; height:800px; border-radius:44px; border:10px solid #1d1d1d; box-shadow:0 30px 80px rgba(0,0,0,.5); }
+
+  /* ---------- Kopf mit Pfad (wie Mosaik) ---------- */
+  header { flex:none; display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0 auto 0 0; }
+  #logo { width:30px; height:30px; border-radius:7px; background:linear-gradient(135deg,#6db3d6,#2f6f8f); display:grid; place-items:center; color:#fff; font-weight:700; }
+  #theme { width:38px; height:34px; padding:0; font-size:17px; line-height:1; }
+  #crumbs { display:flex; flex-wrap:wrap; align-items:center; gap:2px 6px; min-width:0; font-size:13px; }
+  #crumbs button { padding:2px 6px; background:none; border:0; color:inherit; text-decoration:underline; cursor:pointer; }
+  #crumbs .sep { padding:2px 0; opacity:.6; }
+  #crumbs .now { padding:2px 6px; font-weight:600; }
+
+  /* ---------- Spalten: Prozess links, Panels daneben, das neueste rechts ---------- */
+  #scroller { flex:1; min-height:0; overflow:auto; }
+  main { display:grid; grid-template-columns:var(--left,340px) minmax(0,1fr); gap:16px; padding:16px 20px 32px; align-items:start; }
+  .offLeft { display:none !important; }
+
+  /* Boxen links (common.css aus Mosaik) */
+  section.box { padding:10px 14px; }
+  .boxHead { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  .boxTitle { flex:1; min-width:0; margin:0; }
+  .boxTitle.fixed { padding:2px 0; font-size:inherit; font-weight:600; }
+  .boxToggle { display:flex; width:100%; gap:8px; align-items:center; justify-content:space-between; padding:2px 0; background:none; border:0; font-weight:600; text-align:left; }
+  .boxArrow { transition:transform .12s; }
+  .box.closed .boxArrow { transform:rotate(-90deg); }
+  .boxSum { flex-basis:100%; }
+  .boxBody { margin-top:8px; }
+  .box.closed .boxBody,.box:not(.closed) .boxSum { display:none; }
+  .paneBtn { padding:1px 9px; font-weight:600; }
+  .paneBtn.on { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+  .box.locked { opacity:.55; }
+  #kindBox { padding:10px 14px; }
+  #kindBox h2 { font-size:inherit; font-weight:600; margin:0 0 8px; }
+  #kindNav { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  #kindNav a { flex:1; text-align:center; padding:8px 12px; text-decoration:none; color:inherit; background:var(--bg); font-size:15px; cursor:pointer; }
+  #kindNav .on { background:var(--accent); color:var(--on-accent); font-weight:600; }
+  #kindBox .btnRow { margin-top:10px; }
+  .sumCount { margin:0; font-weight:600; }
+  .sumLine { margin-top:4px; font-size:13px; }
+  .pickedRow { display:flex; gap:8px; align-items:center; padding:3px 4px 3px 8px; margin-top:4px; background:var(--bg); border:1px solid var(--line); border-radius:5px; font-size:13px; }
+  .pickedRow span { flex:1; min-width:0; }
+  .pickedRow button { padding:0 7px; }
+  .sumPerson { display:flex; gap:8px; align-items:center; font-size:14px; }
+  progress { width:100%; height:8px; margin-top:8px; }
+
+  /* Panels */
+  aside { position:sticky; top:0; display:flex; flex-direction:column; height:var(--paneH,600px); padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+  .paneHead { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+  .paneHead h2 { margin:0; font-size:18px; }
+  .paneHead .x { margin-left:auto; padding:1px 10px; }
+  .panel { display:flex; flex-direction:column; flex:1; min-height:0; overflow:auto; }
+  .panel > * { flex-shrink:0; }
+  .btnRow.doneRow { position:sticky; bottom:0; z-index:2; margin-top:auto; padding-top:10px; background:var(--card); }
+  .paneSection { margin:18px 0 8px; padding-top:12px; border-top:1px solid var(--line); font-size:15px; }
+  .paneSection.first { margin-top:0; padding-top:0; border-top:0; }
+  .sectionHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .sectionHead h3 { margin:0; font-size:inherit; }
+  .settingRows { display:flex; flex-direction:column; gap:6px; }
+  .settingRow { display:flex; gap:8px; align-items:center; padding:8px 10px; background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+  .settingRow.on { border-color:var(--accent); }
+  .settingText { flex:1; min-width:0; font-size:13px; }
+  .settingText strong { display:block; font-size:14px; }
+  .settingOpen { padding:1px 9px; font-weight:600; }
+  .settingOpen.on { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+
+  /* Personen (wie sharePeople in Mosaik) */
+  .people { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; padding:4px; margin-top:8px; }
+  .personCard { padding:8px 6px; background:var(--bg); border:2px solid transparent; border-radius:8px; font-size:13px; text-align:center; }
+  .personCard[aria-pressed=true] { border-color:var(--accent); }
+  .personCard small { display:block; color:var(--muted); font-size:11px; }
+  .avatar { display:flex; align-items:center; justify-content:center; width:64px; height:64px; margin:0 auto 4px; border-radius:50%; color:#fff; font-size:23px; font-weight:600; }
+  .avatar.sm { width:30px; height:30px; font-size:13px; margin:0; }
+  /* Tabelle wie Alben-Auswahl in Mosaik */
+  .tableWrap { flex:1; min-height:0; overflow:auto; margin-top:8px; border:1px solid var(--line); border-radius:5px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { position:sticky; top:0; background:var(--card); text-align:left; color:var(--muted); font-weight:normal; padding:5px 8px; border-bottom:1px solid var(--line); }
+  td { padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td:first-child { width:100%; white-space:normal; }
+  .num { text-align:right; }
+  tr[data-act] { cursor:pointer; }
+  td label.check { margin:0; font-size:13px; cursor:pointer; }
+
+  .preview { position:relative; aspect-ratio:4/3; border-radius:6px; background:linear-gradient(#5b6b7c,#2d3540); overflow:hidden; }
+  .preview .face { position:absolute; left:38%; top:24%; width:24%; height:42%; border-radius:50% 50% 45% 45%; background:#d1a988; }
+  .preview .box2 { position:absolute; left:34%; top:18%; width:32%; height:54%; border:2px solid #ffd400; }
+  .preview span { position:absolute; left:8px; bottom:6px; font-size:12px; color:#fff; }
+  .video { aspect-ratio:1; max-height:340px; border-radius:6px; background:#111; color:#aaa; display:grid; place-items:center; }
+  .photoGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:6px; }
+  .tile { aspect-ratio:1; border-radius:4px; background:linear-gradient(135deg,#9aa6b2,#5d6874); position:relative; }
+  .tile span { position:absolute; right:4px; bottom:4px; padding:0 5px; background:rgba(0,0,0,.65); color:#fff; border-radius:3px; font-size:12px; }
+  .hist { display:flex; gap:10px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:5px; margin-bottom:6px; cursor:pointer; }
+  .hist.on { border-color:var(--accent); }
+  .hist i { width:64px; height:48px; border-radius:3px; background:linear-gradient(135deg,#9aa6b2,#5d6874); flex:none; }
+  .hist strong { display:block; }
+  .batchRow { display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:3px 0; }
+  #createCount { margin:0 0 4px; font-size:18px; font-weight:600; }
+
+  /* ---------- Schmal (iPhone): Prozess als eine Spalte, jedes Panel bildschirmfüllend darüber ---------- */
+  @container app (max-width:860px) {
+    main { grid-template-columns:1fr !important; padding:12px; }
+    header { padding:10px 12px; }
+    .offLeft { display:revert !important; }
+    aside { position:absolute; inset:0; z-index:40; height:auto; margin:0; border-radius:0; border:0; }
+    #pane2 { z-index:41; } #pane3 { z-index:42; } #right { z-index:43; }
+    aside .paneHead { padding-top:4px; }
+    .row { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="mock-bar">
+  <b>MOCKUP B – Panels nach dem Mosaik-Prinzip</b>
+  <a href="process-navigation.html">Variante A: Accordion</a>
+  <a class="on">Variante B: Panels wie Mosaik</a>
+  <button id="phoneBtn">📱 iPhone-Vorschau</button>
+  <button id="resetBtn">Zurücksetzen</button>
+</div>
+
+<div class="stage" id="stage">
+<div id="device">
+  <header>
+    <div id="logo">◐</div>
+    <h1>Immich Selfie Timelapse</h1>
+    <nav id="crumbs" aria-label="Pfad"></nav>
+    <button id="theme" data-act="theme" title="Hell / Dunkel"></button>
+  </header>
+  <div id="scroller">
+    <main id="main">
+      <div id="left"></div>
+      <aside id="pane" class="hidden"></aside>
+      <aside id="pane2" class="hidden"></aside>
+      <aside id="pane3" class="hidden"></aside>
+      <aside id="right" class="hidden"></aside>
+    </main>
+  </div>
+</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString("de-CH");
+
+// ---------- Mock-Daten ----------
+const PEOPLE = [["Anna","#c98a3d",1284],["Luca","#3d8ea8",612],["Roger","#7d5bb0",2040],["Mia","#b0566b",388],["Noah","#5b8a4a",941],["Lea","#a8435d",257],["Elias","#3f7fa0",730],["Sofia","#777",164]];
+const ALBUMS = [["Familie 2024",842,"2024"],["Ferien Tessin",311,"2023"],["Geburtstage",506,"2019–2026"],["Weihnachten",274,"2019–2025"],["Schule",190,"2022–2026"],["iPhone Selfies",1530,"2018–2026"]];
+const FILTERS = {
+  size:   { t:"Gesichtsgrösse", v:"mindestens 120 px", on:true,  d:"Kleinere Gesichter werden ignoriert, sie würden im Video unscharf.", out:96 },
+  edge:   { t:"Gesicht am Rand", v:"höchstens 25 % Rand fehlt", on:true, d:"Fotos, bei denen das Gesicht zu nah am Bildrand ist, werden aussortiert.", out:41 },
+  bright: { t:"Helligkeit", v:"40 bis 220", on:true, d:"Zu dunkle oder überbelichtete Fotos aussortieren.", out:23 },
+  blur:   { t:"Unschärfe", v:"Schärfe ab 60", on:true, d:"Verwackelte oder unscharfe Gesichter verwerfen.", out:58 },
+  pose:   { t:"Kopfhaltung", v:"Drehung 25°, Neigung 20°", on:true, d:"Nur Fotos, auf denen die Person etwa in die Kamera schaut.", out:77 },
+  eyes:   { t:"Blinzeln", v:"Augen mindestens 30 % offen", on:false, d:"Fotos mit geschlossenen Augen verwerfen.", out:12 },
+};
+const HISTORY = [["Anna","1'102 Fotos · 0:53 min · 10.11.2026"],["Luca","540 Fotos · 0:25 min · 02.10.2026"],["Roger","1'880 Fotos · 1:25 min · 14.08.2026"]];
+
+// ---------- Zustand ----------
+const fresh = () => ({ pane:null, pane2:null, pane3:false, right:false, person:null, all:true, albums:new Set(), closed:new Set(), run:"idle", pct:0, hist:null });
+let S = fresh();
+
+const STEPS = [
+  { box:"person",  pane:"person",  label:"1. Person wählen" },
+  { box:"albums",  pane:"albums",  label:"2. Alben filtern" },
+  { box:"period",  pane:null,      label:"3. Zeitraum" },
+  { box:"quality", pane:"quality", label:"4. Bildauswahl und Qualität" },
+  { box:"video",   pane:"video",   label:"5. Video und Musik" },
+  { box:"create",  pane:"create",  label:"6. Timelapse erstellen" },
+  { box:"result",  pane:"result",  label:"7. Resultat" },
+];
+const PANES = { person:"Person wählen", albums:"Alben filtern", quality:"Bildauswahl und Qualität", video:"Video und Musik", create:"Timelapse erstellen", result:"Resultat", history:"Bisherige Timelapses" };
+const photoCount = () => S.all || !S.albums.size ? 1284 : Math.min(1284, [...S.albums].reduce((a, i) => a + Math.round(ALBUMS[i][1] * .4), 0));
+const activeFilters = () => Object.values(FILTERS).filter(f => f.on);
+
+// ---------- Links: der Prozess als Boxen ----------
+function box(key, title, { toggle = false, pane = null, sum = "", body = "", locked = false } = {}) {
+  const closed = S.closed.has(key);
+  const head = toggle
+    ? `<h2 class="boxTitle"><button class="boxToggle" data-act="toggle:${key}" aria-expanded="${!closed}"><span>${title}</span><span class="boxArrow">▾</span></button></h2>`
+    : `<h2 class="boxTitle fixed">${title}</h2>`;
+  const btn = pane ? `<button class="paneBtn ${S.pane === pane ? "on" : ""}" data-act="pane:${pane}" title="Rechts öffnen" ${locked ? "disabled" : ""}>&gt;</button>` : "";
+  return `<section class="box ${toggle && closed ? "closed" : ""} ${locked ? "locked" : ""}" data-box="${key}">
+    <div class="boxHead">${head}${btn}${toggle ? `<span class="boxSum muted">${sum}</span>` : ""}</div>
+    <div class="boxBody">${body}</div></section>`;
+}
+function drawLeft() {
+  const p = PEOPLE.find(x => x[0] === S.person), lock = !S.person;
+  const f = activeFilters();
+  $("left").innerHTML = `
+    <section id="kindBox">
+      <h2>Welche Ansicht?</h2>
+      <nav id="kindNav"><a title="Heutige Oberfläche">Klassisch</a><a class="on">Geführt</a></nav>
+      <div class="btnRow"><button data-act="new">Neue Timelapse</button></div>
+    </section>
+    ${box("history", "Bisherige Timelapses", { pane:"history", body:`<p class="muted" style="margin:0">${HISTORY.length} Timelapses, zuletzt ${HISTORY[0][0]} am 10.11.2026</p>` })}
+    ${box("person", "1. Person wählen", { pane:"person",
+        body: p ? `<div class="sumPerson"><span class="avatar sm" style="background:${p[1]}">${p[0][0]}</span><span><b>${p[0]}</b><br><span class="muted">${fmt(p[2])} Fotos mit Gesicht</span></span></div>`
+                : `<p class="muted" style="margin:0">Noch niemand gewählt. Öffne die Auswahl mit &gt;</p>` })}
+    ${box("albums", "2. Alben filtern", { toggle:true, pane:"albums", locked:lock,
+        sum: S.all ? "Alle Fotos" : `${S.albums.size} Alben`,
+        body: `<label class="check" style="margin-top:0"><input type="checkbox" data-act="all" ${S.all ? "checked" : ""} ${lock ? "disabled" : ""}> Alle Fotos</label>
+          ${!S.all && S.albums.size ? `<label>Ausgewählte Alben</label>${[...S.albums].map(i => `<div class="pickedRow"><span>${ALBUMS[i][0]}</span><button data-act="album:${i}" title="Entfernen">×</button></div>`).join("")}` : ""}
+          ${S.person ? `<p style="margin:8px 0 0">${fmt(photoCount())} Fotos von ${S.person}</p>` : ""}` })}
+    ${box("period", "3. Zeitraum", { toggle:true, locked:lock, sum:"01.2019 bis 11.2026, höchstens 1 Foto pro Tag",
+        body: `<div class="row"><div><label style="margin-top:0">Von</label><input type="date" value="2019-01-01" ${lock ? "disabled" : ""}></div><div><label style="margin-top:0">Bis</label><input type="date" value="2026-11-12" ${lock ? "disabled" : ""}></div></div>
+          <label>Höchstens behalten</label><select ${lock ? "disabled" : ""}><option>1 Foto pro Tag</option><option>1 Foto pro Woche</option><option>1 Foto pro Monat</option></select>` })}
+    ${box("quality", "4. Bildauswahl und Qualität", { pane:"quality", locked:lock,
+        body: `<p class="sumCount">${f.length} von ${Object.keys(FILTERS).length} Filtern aktiv</p><div class="muted">${f.map(x => x.t).join(", ")}</div>` })}
+    ${box("video", "5. Video und Musik", { pane:"video", locked:lock,
+        body: `<p class="muted" style="margin:0">1080 × 1080 px, 24 Bilder pro Sekunde, H.264<br>Datum unten rechts · Musik: 2 Stücke</p>` })}
+    ${box("create", "6. Timelapse erstellen", { pane:"create", locked:lock,
+        body: S.run === "running" ? `<p class="muted" style="margin:0">Läuft: ${S.pct} %</p><progress max="100" value="${S.pct}"></progress>`
+            : `<p class="muted" style="margin:0">${S.person ? `${fmt(photoCount())} Fotos von ${S.person} bereit` : "Zuerst eine Person wählen"}</p>` })}
+    ${box("result", "7. Resultat", { pane:"result", locked: S.run !== "done" && S.hist === null,
+        body: `<p class="muted" style="margin:0">${S.run === "done" ? `Fertig: 1'102 Fotos, 0:53 min` : S.hist !== null ? `Geöffnet: ${HISTORY[S.hist][0]}` : "Noch keine Timelapse"}</p>` })}`;
+}
+
+// ---------- Panels ----------
+function stepNav(paneKey) {
+  const i = STEPS.findIndex(s => s.pane === paneKey);
+  if (i < 0) return `<div class="btnRow doneRow"><button data-act="done:pane">Fertig</button></div>`;
+  const nav = [STEPS[i - 1], STEPS[i + 1]].filter(Boolean).map(t => `<button class="stepNav" data-act="step:${STEPS.indexOf(t)}" title="Zu «${t.label}»">${t.label}</button>`).join("");
+  return `<div class="btnRow doneRow">${nav}<button data-act="done:pane">Fertig</button></div>`;
+}
+const head = (title, level) => `<div class="paneHead"><h2>${title}</h2><button class="x" data-act="done:${level}" title="Schliessen">×</button></div>`;
+
+const PANE_BODY = {
+  person: () => `<input type="text" placeholder="Nach Namen suchen">
+    <div class="people">${PEOPLE.map(([n, c, k]) => `<button class="personCard" aria-pressed="${S.person === n}" data-act="person:${n}"><span class="avatar" style="background:${c}">${n[0]}</span>${n}<small>${fmt(k)} Fotos</small></button>`).join("")}</div>`,
+  albums: () => `<label class="check" style="margin-top:0"><input type="checkbox" data-act="all" ${S.all ? "checked" : ""}> Alle Fotos verwenden</label>
+    <div class="tableWrap"><table><thead><tr><th>Name</th><th class="num">Anzahl</th><th>Datum</th></tr></thead><tbody>
+    ${ALBUMS.map(([n, k, d], i) => `<tr data-act="album:${i}"><td><label class="check"><input type="checkbox" ${!S.all && S.albums.has(i) ? "checked" : ""}> ${n}</label></td><td class="num">${fmt(k)}</td><td>${d}</td></tr>`).join("")}
+    </tbody></table></div><p class="muted" style="margin:8px 0 0">Es zählt jedes Foto von ${S.person || "der Person"}, das in einem der Alben liegt.</p>`,
+  quality: () => `<p class="muted" style="margin:0 0 10px">Filter sortieren Fotos aus, die im Video stören. Mit &gt; stellst du einen Filter rechts genauer ein.</p>
+    <div class="settingRows">${Object.entries(FILTERS).map(([k, f]) => `<div class="settingRow ${S.pane2 === "f:" + k ? "on" : ""}">
+      <input type="checkbox" data-act="fon:${k}" ${f.on ? "checked" : ""} title="Filter ein/aus">
+      <div class="settingText"><strong>${f.t}</strong>${f.on ? f.v : "aus"}</div>
+      <button class="settingOpen ${S.pane2 === "f:" + k ? "on" : ""}" data-act="p2:f:${k}" title="Rechts öffnen">&gt;</button></div>`).join("")}
+      <div class="settingRow ${S.pane2 === "adv" ? "on" : ""}"><div class="settingText"><strong>Erweitert</strong>Vorschaubilder, 4 Worker, keine Debug-Bilder</div><button class="settingOpen ${S.pane2 === "adv" ? "on" : ""}" data-act="p2:adv">&gt;</button></div></div>
+    <p class="muted" style="margin:10px 0 0">Zusammen sortieren die Filter etwa <b>${activeFilters().reduce((a, f) => a + f.out, 0)}</b> Fotos aus.</p>`,
+  video: () => `<h3 class="paneSection first">Format</h3>
+    <div class="row"><div><label>Ausgabegrösse</label><select><option>1080 × 1080</option><option>720 × 720</option></select></div><div><label>Augenabstand</label><select><option>30 %</option><option>25 %</option></select></div></div>
+    <div class="row"><div><label>Bilder pro Sekunde</label><input type="number" value="24"></div><div><label>Codec</label><select><option>H.264</option><option>H.265</option></select></div></div>
+    <h3 class="paneSection">Datum einblenden</h3>
+    <label class="check"><input type="checkbox" checked> Datum im Video zeigen</label>
+    <div class="row"><div><label>Position</label><select><option>Unten rechts</option><option>Unten links</option></select></div><div><label>Anzeigen</label><select><option>Monat und Jahr</option><option>Nur Jahr</option></select></div></div>
+    <div class="paneSection sectionHead"><h3>Musik</h3><button class="settingOpen ${S.pane2 === "music" ? "on" : ""}" data-act="p2:music" title="Rechts öffnen">&gt;</button></div>
+    <p class="muted" style="margin:0">sunrise.mp3, memories.mp3 · Video an die Länge der Musik anpassen</p>`,
+  create: () => `<p id="createCount">${fmt(photoCount())} Fotos von ${S.person || "–"}</p>
+    <p class="muted" style="margin:0 0 10px">${S.all || !S.albums.size ? "Alle Fotos" : [...S.albums].map(i => ALBUMS[i][0]).join(", ")} · 01.2019 bis 11.2026 · ${activeFilters().length} Filter · 1080 px, 24 fps, mit Musik</p>
+    <p class="muted" style="margin:0 0 10px">Person aus Schritt 1, Fotos aus Schritt 2 und 3, Einstellungen aus Schritt 4 und 5.</p>
+    ${S.run === "running"
+      ? `<h3 style="margin:8px 0 4px">Fortschritt</h3><div class="batchRow"><span>${S.pct < 20 ? "Fotos laden" : S.pct < 85 ? "Gesichter ausrichten" : "Video erstellen"}</span><span>${S.pct} %</span></div><progress max="100" value="${S.pct}"></progress>
+         <p class="muted">${fmt(Math.round(1284 * S.pct / 100))} von ${fmt(1284)} · läuft auf dem Server weiter, auch wenn du das iPhone weglegst.</p><p><button data-act="cancel">Abbrechen</button></p>`
+      : `<p style="margin:12px 0 0"><button class="primary" data-act="start" ${S.person ? "" : "disabled"}>Timelapse erstellen</button></p>
+         ${S.run === "done" ? `<p class="muted">Fertig. Das Ergebnis steht unter 7. Resultat.</p><p><button data-act="step:6">Resultat ansehen &gt;</button></p>` : ""}`}`,
+  result: () => `<div class="video">▶ Timelapse ${S.hist !== null ? HISTORY[S.hist][0] : S.person}</div>
+    <p class="muted">1'102 von 1'284 Fotos verwendet · 0:53 min · 1080 × 1080</p>
+    <h3 class="paneSection">Download</h3>
+    <div class="btnRow"><button class="primary">Video herunterladen</button><button>In Fotos sichern</button></div>
+    <div class="paneSection sectionHead"><h3>Verwendete Fotos</h3><button class="settingOpen ${S.right ? "on" : ""}" data-act="photos" title="Rechts öffnen">&gt;</button></div>
+    <p class="muted" style="margin:0">Einzelne Fotos ansehen, entfernen und das Video neu erstellen.</p>`,
+  history: () => HISTORY.map(([n, m], i) => `<div class="hist ${S.hist === i ? "on" : ""}" data-act="hist:${i}"><i></i><div><strong>${n}</strong><span class="muted">${m}</span></div></div>`).join(""),
+};
+const PANE2 = {
+  adv: { title: "Erweitert", body: () => `<label class="check" style="margin-top:0"><input type="checkbox" checked> Vorschaubilder verwenden (schneller)</label>
+      <label>Parallele Worker</label><input type="number" value="4"><label class="check"><input type="checkbox"> Debug-Bilder behalten</label>` },
+  music: { title: "Musik", body: () => `${["sunrise.mp3 · 2:14", "memories.mp3 · 1:48", "piano-loop.mp3 · 0:58"].map((t, i) => `<label class="check"><input type="checkbox" ${i < 2 ? "checked" : ""}> ${t}</label>`).join("")}
+      <label class="check" style="margin-top:12px"><input type="checkbox" checked> Video an die Länge der Musik anpassen</label>
+      <div class="row"><div><label>Mindestens fps</label><input type="number" value="8"></div><div><label>Höchstens fps</label><input type="number" value="30"></div></div>` },
+};
+for (const [k, f] of Object.entries(FILTERS)) PANE2["f:" + k] = { title: f.t, body: () => `
+    <label class="check" style="margin-top:0"><input type="checkbox" data-act="fon:${k}" ${f.on ? "checked" : ""}> Filter aktiv</label>
+    <label>Schwellwert: ${f.v}</label><input type="range" value="45">
+    <p class="muted">${f.d}</p>
+    <p class="muted">Mit diesem Wert fallen etwa <b>${f.out}</b> Fotos weg.</p>
+    <p style="margin:12px 0 0"><button class="${S.pane3 ? "on" : ""}" data-act="preview">Beispiele anzeigen &gt;</button></p>` };
+
+function drawPanes() {
+  const pane = $("pane"), p2 = $("pane2"), p3 = $("pane3"), r = $("right");
+  pane.classList.toggle("hidden", !S.pane);
+  if (S.pane) pane.innerHTML = head(PANES[S.pane], "pane") + `<div class="panel">${PANE_BODY[S.pane]()}${stepNav(S.pane)}</div>`;
+  p2.classList.toggle("hidden", !S.pane2);
+  if (S.pane2) p2.innerHTML = head(PANE2[S.pane2].title, "pane2") + `<div class="panel">${PANE2[S.pane2].body()}<div class="btnRow doneRow"><button data-act="done:pane2">Fertig</button></div></div>`;
+  p3.classList.toggle("hidden", !S.pane3);
+  if (S.pane3) p3.innerHTML = head("Beispiele", "pane3") + `<div class="panel"><p class="muted" style="margin:0 0 8px">Gelb markiert: so sieht der Filter das Gesicht. Diese Fotos würden aussortiert.</p>
+      ${[1, 2, 3].map(i => `<div class="preview" style="margin-bottom:8px"><div class="face" style="left:${30 + i * 6}%"></div><div class="box2" style="left:${26 + i * 6}%"></div><span>Foto ${i} · würde wegfallen</span></div>`).join("")}
+      <div class="btnRow doneRow"><button data-act="done:pane3">Fertig</button></div></div>`;
+  r.classList.toggle("hidden", !S.right);
+  if (S.right) r.innerHTML = head("Verwendete Fotos", "right") + `<div class="panel"><p class="muted" style="margin:0 0 8px">1'102 Fotos · antippen zum Ansehen, gedrückt halten zum Auswählen</p>
+      <div class="photoGrid">${Array.from({ length: 30 }, (_, i) => `<div class="tile"><span>${new Date(2019, i * 3, 1).toLocaleDateString("de-CH", { month: "2-digit", year: "numeric" })}</span></div>`).join("")}</div>
+      <div class="btnRow doneRow"><button data-act="done:right">Fertig</button></div></div>`;
+}
+
+// ---------- Spalten anordnen (fitColumns aus Mosaik, aber auf die Gerätebreite bezogen) ----------
+function stack() {
+  const s = [{ id: "left", label: "Prozess" }];
+  if (S.pane) s.push({ id: "pane", label: PANES[S.pane] });
+  if (S.pane2) s.push({ id: "pane2", label: PANE2[S.pane2].title });
+  if (S.pane3) s.push({ id: "pane3", label: "Beispiele" });
+  if (S.right) s.push({ id: "right", label: "Verwendete Fotos" });
+  return s;
+}
+function layout() {
+  const ids = stack().map(p => p.id), page = $("device").clientWidth, narrow = page <= 860;
+  const leftW = Math.min(380, Math.max(300, page * .32));
+  const width = { left: leftW, pane: 520, pane2: 520, pane3: 360, right: 640 };
+  const track = { left: `${leftW}px`, pane: "minmax(0,520px)", pane2: "minmax(0,520px)", pane3: "minmax(0,720px)", right: "minmax(0,1fr)" };
+  let used = 40 + width[ids.at(-1)], first = ids.length - 1;
+  while (first > 0 && used + 16 + width[ids[first - 1]] <= page) { first--; used += 16 + width[ids[first]]; }
+  ["left", "pane", "pane2", "pane3", "right"].forEach(id => $(id).classList.toggle("offLeft", !narrow && ids.indexOf(id) > -1 && ids.indexOf(id) < first));
+  const cols = ids.slice(first).map(id => track[id]);
+  if (cols.length === 1) cols.push("minmax(0,1fr)");
+  $("main").style.gridTemplateColumns = narrow ? "" : cols.join(" ");
+  $("device").style.setProperty("--paneH", `${$("scroller").clientHeight - 32}px`);
+  // Pfad oben, erst ab zwei Stufen
+  const st = stack();
+  $("crumbs").innerHTML = st.length < 2 ? "" : st.map((p, i) => i === st.length - 1
+    ? `<span class="now">${p.label}</span>` : `<button data-act="crumb:${p.id}">${p.label}</button><span class="sep">&gt;</span>`).join("");
+}
+
+function render() { drawLeft(); drawPanes(); layout(); $("theme").textContent = document.documentElement.dataset.theme === "dark" ? "☀" : "☾"; }
+
+// ---------- Verhalten wie in Mosaik ----------
+// Wer ein Panel schliesst, schliesst auch alles rechts davon
+function closeRightOf(level) {
+  const order = ["left", "pane", "pane2", "pane3", "right"], keep = order.indexOf(level);
+  if (keep < 1) S.pane = null;
+  if (keep < 2) S.pane2 = null;
+  if (keep < 3) S.pane3 = false;
+  if (keep < 4) S.right = false;
+}
+function openPane(name) {
+  if (S.pane === name) return closeRightOf("left");
+  closeRightOf("left");
+  S.pane = name;
+}
+function goStep(i) {
+  const step = STEPS[i];
+  if (step.pane) return openPane(step.pane);
+  closeRightOf("left"); // Schritt ohne Panel: Box links aufklappen
+  S.closed.delete(step.box);
+  requestAnimationFrame(() => document.querySelector(`.box[data-box="${step.box}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+}
+const LEVEL_BEFORE = { pane: "left", pane2: "pane", pane3: "pane2", right: S => (S.pane3 ? "pane3" : S.pane2 ? "pane2" : "pane") };
+
+let timer;
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const [act, ...rest] = el.dataset.act.split(":"), arg = rest.join(":");
+  switch (act) {
+    case "toggle": S.closed.has(arg) ? S.closed.delete(arg) : S.closed.add(arg); break;
+    case "pane": openPane(arg); break;
+    case "step": goStep(+arg); break;
+    case "crumb": closeRightOf(arg); break;
+    case "done": closeRightOf(arg === "right" ? LEVEL_BEFORE.right(S) : LEVEL_BEFORE[arg]); break;
+    case "person": S.person = arg; break;
+    case "all": S.all = el.checked; if (S.all) S.albums.clear(); break;
+    case "album": { const i = +arg; S.all = false; S.albums.has(i) ? S.albums.delete(i) : S.albums.add(i); if (!S.albums.size) S.all = true; e.preventDefault(); break; }
+    case "fon": FILTERS[arg].on = el.checked; break;
+    case "p2": S.pane3 = false; S.right = false; S.pane2 = S.pane2 === arg ? null : arg; break;
+    case "preview": S.pane3 = !S.pane3; break;
+    case "photos": S.right = !S.right; break;
+    case "hist": S.hist = +arg; S.pane = "result"; S.pane2 = null; S.pane3 = false; S.right = false; break;
+    case "start":
+      S.run = "running"; S.pct = 0;
+      timer = setInterval(() => { S.pct += 4; if (S.pct >= 100) { clearInterval(timer); S.run = "done"; S.hist = null; } render(); }, 150);
+      break;
+    case "cancel": clearInterval(timer); S.run = "idle"; break;
+    case "new": clearInterval(timer); S = fresh(); break;
+    case "theme": localStorage.setItem("tlTheme", document.documentElement.dataset.theme === "dark" ? "light" : "dark"); applyTheme(); break;
+    default: return;
+  }
+  render();
+});
+// Escape schliesst das Panel ganz rechts
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  const st = stack(); if (st.length > 1) { closeRightOf(st.at(-2).id); render(); }
+});
+$("phoneBtn").onclick = e => { $("stage").classList.toggle("phone"); e.target.classList.toggle("on"); render(); };
+$("resetBtn").onclick = () => { clearInterval(timer); S = fresh(); render(); };
+new ResizeObserver(layout).observe($("device"));
+render();
+</script>
+</body>
+</html>

@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Immich Selfie Timelapse</title>
+    <script>
+      // Set the theme before the page renders, so it does not flash. Used by the guided view.
+      // Without an own choice, the system setting counts (like Mosaik).
+      (function () {
+        var choice = localStorage.getItem('immich-timelapse-theme');
+        var dark = choice === 'dark' || (choice !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>

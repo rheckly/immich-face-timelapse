@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mockup – Geführter Prozess · Immich Selfie Timelapse</title>
+<style>
+  :root {
+    --bg: #0f0f0f; --panel: #1a1a1a; --panel-2: #222; --border: #2e2e2e;
+    --text: #e8e8e8; --muted: #8a8a8a; --accent: #4f8cff; --accent-soft: rgba(79,140,255,.14);
+    --ok: #3ecf8e; --warn: #f5a524; --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  body { background: #070707; color: var(--text); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  input, select { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: .55rem .7rem; width: 100%; min-height: 44px; }
+
+  /* ---------- Mockup toolbar (nicht Teil des Designs) ---------- */
+  .mock-bar { position: sticky; top: 0; z-index: 50; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
+    padding: .5rem 1rem; background: #2b2410; color: #f5d27a; font-size: 13px; border-bottom: 1px solid #4a3d16; }
+  .mock-bar b { margin-right: auto; }
+  .mock-bar button { padding: .3rem .7rem; border: 1px solid #6b5a22; border-radius: 6px; }
+  .mock-bar button.on { background: #f5d27a; color: #2b2410; }
+
+  .stage { display: flex; justify-content: center; padding: 0; }
+  .stage.phone { padding: 1.5rem 0; }
+  .device { width: 100%; background: var(--bg); min-height: calc(100vh - 42px); container-type: inline-size; container-name: app; position: relative; overflow: clip; }
+  .stage.phone .device { width: 390px; height: 800px; min-height: 0; border-radius: 44px; border: 10px solid #1d1d1d; box-shadow: 0 0 0 2px #333, 0 30px 80px rgba(0,0,0,.6); overflow-y: auto; }
+
+  /* ---------- Landing ---------- */
+  .landing { min-height: 100%; display: grid; place-items: center; padding: 2rem 1.25rem; }
+  .landing-inner { max-width: 760px; width: 100%; text-align: center; }
+  .landing h1 { font-size: 1.6rem; margin-bottom: .35rem; }
+  .landing p.lead { color: var(--muted); margin-bottom: 2rem; }
+  .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .choice { text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; transition: .15s; position: relative; }
+  .choice:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .choice .badge { position: absolute; top: 1rem; right: 1rem; font-size: 11px; padding: .15rem .5rem; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+  .choice h2 { font-size: 1.1rem; margin: .75rem 0 .35rem; }
+  .choice p { color: var(--muted); font-size: 14px; }
+  .thumb { height: 110px; border-radius: 8px; background: var(--panel-2); display: flex; gap: 6px; padding: 8px; }
+  .thumb .col { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .thumb i { display: block; background: #333; border-radius: 4px; flex: 1; }
+  .thumb .side { flex: 0 0 30%; }
+  .thumb .side i { flex: 0 0 14px; }
+  .thumb .side i.a { background: var(--accent); }
+  .remember { margin-top: 1.25rem; color: var(--muted); font-size: 13px; display: inline-flex; gap: .5rem; align-items: center; }
+  .remember input { width: auto; min-height: 0; }
+  @container app (max-width: 640px) { .choice-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- App shell ---------- */
+  .app { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: auto 1fr; min-height: 100%; }
+  .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: .75rem; padding: .85rem 1.25rem; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: rgba(15,15,15,.92); backdrop-filter: blur(8px); z-index: 20; }
+  .topbar h1 { font-size: 1.05rem; font-weight: 600; }
+  .topbar .spacer { flex: 1; }
+  .conn { display: inline-flex; align-items: center; gap: .4rem; font-size: 13px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .icon-btn { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; }
+  .icon-btn:hover { background: var(--panel-2); }
+  .burger { display: none; }
+
+  /* Sidebar / Stepper */
+  .sidebar { border-right: 1px solid var(--border); padding: 1.25rem 1rem; position: sticky; top: 58px; align-self: start; height: calc(100vh - 100px); overflow-y: auto; }
+  .stage.phone .sidebar { height: auto; }
+  .sidebar .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 .5rem .75rem; }
+  .steps { list-style: none; position: relative; }
+  .step { position: relative; }
+  .step + .step::before { content: ""; position: absolute; left: 25px; top: -12px; height: 12px; width: 2px; background: var(--border); }
+  .step.done + .step::before { background: var(--ok); }
+  .step-btn { width: 100%; display: flex; gap: .75rem; align-items: flex-start; text-align: left; padding: .6rem .5rem; border-radius: 10px; margin-bottom: 12px; }
+  .step-btn:hover { background: var(--panel); }
+  .step.active .step-btn { background: var(--accent-soft); }
+  .num { flex: 0 0 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 14px; border: 2px solid var(--border); color: var(--muted); background: var(--bg); }
+  .step.active .num { border-color: var(--accent); color: var(--accent); }
+  .step.done .num { background: var(--ok); border-color: var(--ok); color: #062; }
+  .step.locked { opacity: .45; }
+  .step.locked .step-btn { cursor: not-allowed; }
+  .step-title { font-weight: 600; font-size: 14px; display: flex; gap: .4rem; align-items: center; }
+  .opt { font-size: 10px; font-weight: 500; color: var(--muted); border: 1px solid var(--border); border-radius: 99px; padding: 0 .4rem; }
+  .step-sum { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .step.done .step-sum { color: #a9dcc4; }
+  .sidebar-foot { margin-top: 1rem; padding: .75rem; border-radius: 10px; background: var(--panel); font-size: 12.5px; color: var(--muted); }
+  .sidebar-foot a { color: var(--accent); }
+
+  /* Content panels */
+  .content { padding: 1.25rem; max-width: 860px; width: 100%; padding-bottom: 6rem; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: .75rem; overflow: hidden; }
+  .panel.active { border-color: #35507f; }
+  .panel-head { width: 100%; display: flex; align-items: center; gap: .75rem; padding: .9rem 1rem; text-align: left; min-height: 56px; }
+  .panel-head .num { flex-basis: 28px; height: 28px; font-size: 12px; }
+  .panel.done .panel-head .num { background: var(--ok); border-color: var(--ok); color: #062; }
+  .panel.active .panel-head .num { border-color: var(--accent); color: var(--accent); }
+  .panel-head .t { flex: 1; }
+  .panel-head .t b { display: block; font-size: 15px; }
+  .panel-head .t span { font-size: 12.5px; color: var(--muted); }
+  .chev { transition: transform .2s; color: var(--muted); }
+  .panel.open > .panel-head .chev { transform: rotate(180deg); }
+  .panel-body { display: none; padding: 0 1rem 1rem; }
+  .panel.open > .panel-body { display: block; }
+  .panel.locked { opacity: .5; }
+  .hint { color: var(--muted); font-size: 13px; margin-bottom: .75rem; }
+
+  /* sub-panels (nested accordions inside a step) */
+  .sub { border: 1px solid var(--border); border-radius: 10px; margin-bottom: .5rem; background: var(--panel-2); }
+  .sub > summary { list-style: none; padding: .7rem .85rem; display: flex; align-items: center; gap: .6rem; cursor: pointer; min-height: 46px; }
+  .sub > summary::-webkit-details-marker { display: none; }
+  .sub > summary .val { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .sub > summary::after { content: "▾"; color: var(--muted); margin-left: .5rem; transition: .2s; }
+  .sub[open] > summary::after { transform: rotate(180deg); }
+  .sub .sub-body { padding: .25rem .85rem .85rem; display: grid; gap: .75rem; }
+  .toggle { width: 38px; height: 22px; border-radius: 99px; background: #444; position: relative; flex: 0 0 38px; }
+  .toggle::after { content: ""; position: absolute; width: 18px; height: 18px; top: 2px; left: 2px; border-radius: 50%; background: #fff; transition: .15s; }
+  .toggle.on { background: var(--accent); }
+  .toggle.on::after { left: 18px; }
+  .row { display: flex; align-items: center; gap: .75rem; }
+  .row label { flex: 1; font-size: 14px; }
+  .row small { display: block; color: var(--muted); font-size: 12px; }
+  input[type=range] { padding: 0; min-height: 30px; accent-color: var(--accent); background: none; border: 0; }
+
+  /* People grid */
+  .search { margin-bottom: .75rem; }
+  .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: .6rem; }
+  .person { display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .6rem .3rem; border-radius: 10px; border: 2px solid transparent; font-size: 13px; }
+  .person:hover { background: var(--panel-2); }
+  .person.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .avatar { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #111; }
+
+  /* Albums */
+  .chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .chip { padding: .5rem .85rem; border-radius: 99px; border: 1px solid var(--border); background: var(--panel-2); font-size: 13.5px; min-height: 40px; }
+  .chip.sel { border-color: var(--accent); background: var(--accent-soft); color: #cfe0ff; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .field span { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: .3rem; }
+  .stat { display: flex; gap: .5rem; align-items: baseline; padding: .75rem; border-radius: 10px; background: var(--panel-2); margin: .75rem 0; }
+  .stat b { font-size: 1.5rem; color: var(--accent); }
+
+  /* Summary + run */
+  .summary { display: grid; gap: .4rem; margin-bottom: 1rem; }
+  .summary div { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem .75rem; border-radius: 8px; background: var(--panel-2); font-size: 14px; }
+  .summary div span:first-child { color: var(--muted); }
+  .summary a { color: var(--accent); font-size: 12.5px; cursor: pointer; }
+  .progress { height: 10px; border-radius: 99px; background: var(--panel-2); overflow: hidden; margin: .75rem 0 .35rem; }
+  .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #8bb4ff); transition: width .25s; }
+  .progress-meta { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+
+  /* Results */
+  .video { aspect-ratio: 1 / 1; max-width: 320px; border-radius: 10px; background: repeating-linear-gradient(45deg, #222 0 12px, #262626 12px 24px); display: grid; place-items: center; color: var(--muted); margin-bottom: 1rem; }
+  .folders { display: grid; gap: .5rem; }
+  .folder { display: flex; align-items: center; gap: .75rem; padding: .7rem .8rem; border-radius: 10px; background: var(--panel-2); }
+  .folder .meta { flex: 1; font-size: 14px; }
+  .folder .meta small { display: block; color: var(--muted); font-size: 12px; }
+
+  /* Buttons */
+  .btn { min-height: 44px; padding: .6rem 1.1rem; border-radius: 10px; font-weight: 600; font-size: 14px; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.primary:disabled { background: #2b3a55; color: #7c8ba8; cursor: not-allowed; }
+  .btn.ghost { border: 1px solid var(--border); }
+  .btn.danger { border: 1px solid #5a2a2a; color: #ff8a8a; }
+  .btn.small { min-height: 36px; padding: .35rem .75rem; font-size: 13px; }
+  .panel-actions { display: flex; justify-content: space-between; gap: .5rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+  /* Mobile bottom bar */
+  .bottombar { display: none; }
+  .scrim { display: none; }
+
+  /* ---------- Mobile layout (container query → funktioniert auch in der iPhone-Vorschau) ---------- */
+  @container app (max-width: 760px) {
+    .app { grid-template-columns: 1fr; }
+    .burger { display: grid; }
+    .topbar { padding: .6rem .75rem; }
+    .topbar .conn span { display: none; }
+    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 84%; max-width: 320px; height: 100vh; background: var(--bg); z-index: 40;
+      transform: translateX(-105%); transition: transform .25s; border-right: 1px solid var(--border); padding-top: 1rem; }
+    .stage.phone .sidebar { position: absolute; height: 100%; }
+    .device.drawer-open .sidebar { transform: none; }
+    .device.drawer-open .scrim { display: block; position: absolute; inset: 0; background: rgba(0,0,0,.55); z-index: 30; }
+    .content { padding: .75rem; padding-bottom: 7rem; }
+    .panel-head { padding: .8rem .85rem; }
+    .panel-body { padding: 0 .85rem .9rem; }
+    .grid2 { grid-template-columns: 1fr; }
+    .panel-actions { display: none; } /* übernimmt die Bottom-Bar */
+    .bottombar { display: flex; position: sticky; bottom: 0; left: 0; right: 0; z-index: 25; gap: .5rem; align-items: center;
+      padding: .6rem .75rem calc(.6rem + env(safe-area-inset-bottom)); background: rgba(15,15,15,.96); border-top: 1px solid var(--border); backdrop-filter: blur(8px); }
+    .stage.phone .bottombar { position: sticky; }
+    .bottombar .mini { flex: 1; font-size: 12px; color: var(--muted); }
+    .bottombar .mini b { display: block; color: var(--text); font-size: 14px; }
+    .dots { display: flex; gap: 4px; margin-top: 4px; }
+    .dots i { width: 18px; height: 4px; border-radius: 2px; background: var(--border); }
+    .dots i.d { background: var(--ok); } .dots i.a { background: var(--accent); }
+    .app { grid-template-rows: auto 1fr auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="mock-bar">
+  <b>MOCKUP – nur zur Diskussion, keine echte Funktion</b>
+  <button data-view="landing">Landing</button>
+  <button data-view="app" class="on">Neue Ansicht</button>
+  <a href="process-blades.html" style="padding:.3rem .7rem;border:1px solid #6b5a22;border-radius:6px;color:inherit;text-decoration:none">Variante B: Blades →</a>
+  <button id="phoneBtn">📱 iPhone-Vorschau</button>
+  <button id="resetBtn">Zurücksetzen</button>
+</div>
+
+<div class="stage" id="stage">
+  <div class="device" id="device">
+
+    <!-- ================= LANDING ================= -->
+    <section class="landing" id="landing" hidden>
+      <div class="landing-inner">
+        <h1>Immich Selfie Timelapse</h1>
+        <p class="lead">Wie möchtest du arbeiten?</p>
+        <div class="choice-grid">
+          <button class="choice" onclick="alert('→ würde die heutige Ansicht öffnen (/classic)')">
+            <div class="thumb"><div class="col"><i></i><i></i><i></i><i></i></div></div>
+            <h2>Klassische Ansicht</h2>
+            <p>Alles auf einer Seite – wie bisher. Für alle, die die App schon kennen.</p>
+          </button>
+          <button class="choice" onclick="show('app')">
+            <span class="badge">Neu</span>
+            <div class="thumb"><div class="col side"><i class="a"></i><i></i><i></i><i></i><i></i></div><div class="col"><i></i><i style="flex:2"></i></div></div>
+            <h2>Geführter Prozess</h2>
+            <p>Schritt für Schritt, mit auf- und zuklappbaren Panels. Optimiert für iPhone und Tablet.</p>
+          </button>
+        </div>
+        <label class="remember"><input type="checkbox" checked /> Auswahl merken (umschalten jederzeit über ⚙ oben rechts)</label>
+      </div>
+    </section>
+
+    <!-- ================= NEW APP ================= -->
+    <div class="app" id="app">
+      <header class="topbar">
+        <button class="icon-btn burger" onclick="toggleDrawer(true)" aria-label="Schritte">☰</button>
+        <h1>Selfie Timelapse</h1>
+        <div class="spacer"></div>
+        <span class="conn"><i class="dot"></i><span>Immich v1.132 verbunden</span></span>
+        <button class="icon-btn" title="Zur klassischen Ansicht" onclick="show('landing')">⇄</button>
+      </header>
+
+      <aside class="sidebar">
+        <div class="label">Prozess</div>
+        <ol class="steps" id="steps"></ol>
+        <div class="sidebar-foot">Fertige Timelapses findest du jederzeit unter <a onclick="go(5)">6 · Ergebnisse</a> – auch ohne den Prozess zu durchlaufen.</div>
+      </aside>
+      <div class="scrim" onclick="toggleDrawer(false)"></div>
+
+      <main class="content" id="content">
+
+        <!-- 1 Person -->
+        <section class="panel" data-step="0">
+          <button class="panel-head" onclick="go(0)"><span class="num">1</span><span class="t"><b>Person wählen</b><span data-sum></span></span><span class="chev">▾</span></button>
+          <div class="panel-body">
+            <p class="hint">Wessen Gesicht soll in der Timelapse erscheinen?</p>
+            <input class="search" placeholder="🔍 Person suchen…" />
+            <div class="people" id="people"></div>
+            <div class="panel-actions"><span></span><button class="btn primary" data-next>Weiter</button></div>
+          </div>
+        </section>
+
+        <!-- 2 Albums -->
+        <section class="panel" data-step="1">
+          <button class="panel-head" onclick="go(1)"><span class="num">2</span><span class="t"><b>Alben filtern <span class="opt">optional</span></b><span data-sum></span></span><span class="chev">▾</span></button>
+          <div class="panel-body">
+            <p class="hint">Nur Fotos aus bestimmten Alben verwenden. Ohne Auswahl werden alle Fotos genutzt.</p>
+            <div class="chips" id="albums"></div>
+            <div class="panel-actions"><button class="btn ghost" data-prev>Zurück</button><button class="btn primary" data-next>Weiter</button></div>
+          </div>
+        </section>
+
+        <!-- 3 Zeitraum -->
+        <section class="panel" data-step="2">
+          <button class="panel-head" onclick="go(2)"><span class="num">3</span><span class="t"><b>Zeitraum</b><span data-sum></span></span><span class="chev">▾</span></button>
+          <div class="panel-body">
+            <div class="grid2">
+              <label class="field"><span>Von</span><input type="date" value="2019-01-01" /></label>
+              <label class="field"><span>Bis</span><input type="date" value="2026-11-12" /></label>
+            </div>
+            <div class="stat"><b>1'284</b> Fotos von <strong id="statName">–</strong> im gewählten Zeitraum</div>
+            <details class="sub"><summary>Zeitintervall <span class="val">max. 1 Foto / Tag</span></summary>
+              <div class="sub-body"><div class="row"><label>Höchstens behalten</label><select style="width:auto"><option>1 pro Tag</option><option>1 pro Woche</option><option>1 pro Monat</option></select></div></div>
+            </details>
+            <div class="panel-actions"><button class="btn ghost" data-prev>Zurück</button><button class="btn primary" data-next>Weiter</button></div>
+          </div>
+        </section>
+
+        <!-- 4 Qualität -->
+        <section class="panel" data-step="3">
+          <button class="panel-head" onclick="go(3)"><span class="num">4</span><span class="t"><b>Bildauswahl &amp; Qualität</b><span data-sum></span></span><span class="chev">▾</span></button>
+          <div class="panel-body">
+            <p class="hint">Filter, die schlechte Fotos aussortieren. Die Standardwerte passen meistens – aufklappen zum Anpassen.</p>
+            <details class="sub"><summary><span class="toggle on"></span>Gesichtsgrösse <span class="val">min. 120 px</span></summary>
+              <div class="sub-body"><div class="row"><label>Min. Gesichtsgrösse<small>Kleinere Gesichter werden ignoriert</small></label></div><input type="range" min="40" max="400" value="120" /></div></details>
+            <details class="sub"><summary><span class="toggle on"></span>Gesicht zu nah am Rand <span class="val">max. 25 %</span></summary>
+              <div class="sub-body"><input type="range" value="25" /></div></details>
+            <details class="sub"><summary><span class="toggle on"></span>Helligkeit <span class="val">40–220</span></summary>
+              <div class="sub-body"><input type="range" value="40" /><input type="range" value="85" /></div></details>
+            <details class="sub"><summary><span class="toggle on"></span>Unschärfe <span class="val">Schärfe ≥ 60</span></summary>
+              <div class="sub-body"><input type="range" value="60" /></div></details>
+            <details class="sub"><summary><span class="toggle on"></span>Kopfhaltung <span class="val">Yaw 25° · Pitch 20°</span></summary>
+              <div class="sub-body"><div class="row"><label>Max. Yaw</label></div><input type="range" value="25" /><div class="row"><label>Max. Pitch</label></div><input type="range" value="20" /></div></details>
+            <details class="sub"><summary><span class="toggle"></span>Blinzel-Erkennung <span class="val">aus</span></summary>
+              <div class="sub-body"><input type="range" value="30" /></div></details>
+            <details class="sub"><summary>Erweitert <span class="val">Preview-Bilder · 4 Worker</span></summary>
+              <div class="sub-body">
+                <div class="row"><label>Preview-Bilder verwenden<small>schneller, etwas geringere Qualität</small></label><span class="toggle on"></span></div>
+                <div class="row"><label>Parallele Worker</label><select style="width:auto"><option>4</option><option>8</option></select></div>
+                <div class="row"><label>Debug-Bilder behalten</label><span class="toggle"></span></div>
+              </div></details>
+            <div class="panel-actions"><button class="btn ghost" data-prev>Zurück</button><button class="btn primary" data-next>Weiter</button></div>
+          </div>
+        </section>
+
+        <!-- 5 Video -->
+        <section class="panel" data-step="4">
+          <button class="panel-head" onclick="go(4)"><span class="num">5</span><span class="t"><b>Video &amp; Musik</b><span data-sum></span></span><span class="chev">▾</span></button>
+          <div class="panel-body">
+            <details class="sub" open><summary>Format <span class="val">1080 px · 24 fps · H.264</span></summary>
+              <div class="sub-body grid2">
+                <label class="field"><span>Ausgabegrösse</span><select><option>1080 × 1080</option><option>720 × 720</option></select></label>
+                <label class="field"><span>Framerate</span><select><option>24 fps</option><option>12 fps</option><option>30 fps</option></select></label>
+                <label class="field"><span>Codec</span><select><option>H.264</option><option>H.265</option></select></label>
+                <label class="field"><span>Augenabstand</span><select><option>30 %</option></select></label>
+              </div></details>
+            <details class="sub"><summary><span class="toggle on"></span>Datum einblenden <span class="val">unten rechts · Jahr + Monat</span></summary>
+              <div class="sub-body"><div class="row"><label>Position</label><select style="width:auto"><option>Unten rechts</option><option>Unten links</option></select></div></div></details>
+            <details class="sub"><summary><span class="toggle on"></span>Musik <span class="val">2 Tracks · an Musik anpassen</span></summary>
+              <div class="sub-body">
+                <div class="row"><label>✓ sunrise.mp3</label></div><div class="row"><label>✓ memories.mp3</label></div>
+                <div class="row"><label>Video an Musiklänge anpassen</label><span class="toggle on"></span></div>
+              </div></details>
+            <div class="panel-actions"><button class="btn ghost" data-prev>Zurück</button><button class="btn primary" data-next>Weiter</button></div>
+          </div>
+        </section>
+
+        <!-- 6 Erstellen -->
+        <section class="panel" data-step="5">
+          <button class="panel-head" onclick="go(5)"><span class="num">6</span><span class="t"><b>Erstellen &amp; Ergebnisse</b><span data-sum></span></span><span class="chev">▾</span></button>
+          <div class="panel-body">
+            <div id="runIdle">
+              <div class="summary">
+                <div><span>Person</span><span id="sumPerson">–</span></div>
+                <div><span>Alben</span><span id="sumAlbums">Alle</span></div>
+                <div><span>Zeitraum</span><span>01.2019 – 11.2026 · ~1'284 Fotos</span></div>
+                <div><span>Video</span><span>1080 px · 24 fps · mit Musik</span></div>
+              </div>
+              <button class="btn primary" style="width:100%" id="startBtn">▶ Timelapse erstellen</button>
+            </div>
+            <div id="runActive" hidden>
+              <b id="runLabel">Gesichter werden ausgerichtet…</b>
+              <div class="progress"><i id="bar"></i></div>
+              <div class="progress-meta"><span id="runCount">0 / 1'284</span><span>Du kannst das iPhone weglegen – es läuft auf dem Server.</span></div>
+              <button class="btn danger small" style="margin-top:.75rem" id="cancelBtn">Abbrechen</button>
+            </div>
+            <div id="runDone" hidden>
+              <div class="video">▶ Timelapse-Vorschau</div>
+              <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+                <button class="btn primary small">⬇ Video laden</button><button class="btn ghost small">🖼 Bilder ansehen</button><button class="btn ghost small" onclick="resetFlow()">Neue Timelapse</button>
+              </div>
+            </div>
+            <details class="sub" open style="margin-top:.5rem"><summary>Bisherige Timelapses <span class="val">3 Ordner</span></summary>
+              <div class="sub-body folders">
+                <div class="folder"><span>📁</span><div class="meta">Anna<small>1'284 Bilder · Video 0:53 · 10.11.2026</small></div><button class="btn ghost small">Öffnen</button></div>
+                <div class="folder"><span>📁</span><div class="meta">Luca<small>612 Bilder · Video 0:25 · 02.10.2026</small></div><button class="btn ghost small">Öffnen</button></div>
+                <div class="folder"><span>📁</span><div class="meta">Roger<small>2'040 Bilder · Video 1:25 · 14.08.2026</small></div><button class="btn ghost small">Öffnen</button></div>
+              </div></details>
+          </div>
+        </section>
+      </main>
+
+      <!-- Mobile bottom bar -->
+      <nav class="bottombar">
+        <button class="btn ghost small" data-prev>‹</button>
+        <div class="mini"><b id="bbTitle">Person wählen</b><span id="bbStep">Schritt 1 von 6</span><div class="dots" id="dots"></div></div>
+        <button class="btn primary" data-next id="bbNext">Weiter</button>
+      </nav>
+    </div>
+  </div>
+</div>
+
+<script>
+  const STEPS = [
+    { t: 'Person wählen', req: true },
+    { t: 'Alben filtern', opt: true },
+    { t: 'Zeitraum' },
+    { t: 'Bildauswahl & Qualität' },
+    { t: 'Video & Musik' },
+    { t: 'Erstellen & Ergebnisse' },
+  ];
+  const PEOPLE = [['Anna','#f6c177'],['Luca','#9ccfd8'],['Roger','#c4a7e7'],['Mia','#ebbcba'],['Noah','#a3be8c'],['Lea','#eb6f92'],['Elias','#88c0d0'],['Sofia','#d8dee9']];
+  const ALBUMS = ['Familie 2024','Ferien Tessin','Geburtstage','Weihnachten','Schule','iPhone Selfies'];
+  const state = { cur: 0, person: null, albums: new Set(), done: new Set() };
+
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+
+  function summaries() {
+    return [
+      state.person || 'Noch niemand gewählt',
+      state.albums.size ? [...state.albums].join(', ') : 'Alle Fotos',
+      '01.2019 – 11.2026 · 1 / Tag',
+      '5 Filter aktiv',
+      '1080 px · 24 fps · Musik',
+      state.done.has(5) ? 'Fertig ✓' : 'Bereit zum Start',
+    ];
+  }
+  const unlocked = i => i === 0 || !!state.person;
+
+  function render() {
+    const sums = summaries();
+    $('#steps').innerHTML = STEPS.map((s, i) => `
+      <li class="step ${i === state.cur ? 'active' : ''} ${state.done.has(i) ? 'done' : ''} ${unlocked(i) ? '' : 'locked'}">
+        <button class="step-btn" onclick="go(${i})"><span class="num">${state.done.has(i) ? '✓' : i + 1}</span>
+          <span><span class="step-title">${s.t}${s.opt ? '<span class="opt">optional</span>' : ''}</span><div class="step-sum">${sums[i]}</div></span></button>
+      </li>`).join('');
+    $$('.panel').forEach(p => {
+      const i = +p.dataset.step;
+      p.classList.toggle('open', i === state.cur);
+      p.classList.toggle('active', i === state.cur);
+      p.classList.toggle('done', state.done.has(i));
+      p.classList.toggle('locked', !unlocked(i));
+      p.querySelector('.num').textContent = state.done.has(i) ? '✓' : i + 1;
+      p.querySelector('[data-sum]').textContent = sums[i];
+    });
+    $('#people').innerHTML = PEOPLE.map(([n, c]) => `<button class="person ${state.person === n ? 'sel' : ''}" onclick="pick('${n}')"><span class="avatar" style="background:${c}">${n[0]}</span>${n}</button>`).join('');
+    $('#albums').innerHTML = ALBUMS.map(a => `<button class="chip ${state.albums.has(a) ? 'sel' : ''}" onclick="toggleAlbum('${a}')">${state.albums.has(a) ? '✓ ' : ''}${a}</button>`).join('');
+    $('#statName').textContent = state.person || '–';
+    $('#sumPerson').textContent = state.person || '–';
+    $('#sumAlbums').textContent = state.albums.size ? [...state.albums].join(', ') : 'Alle';
+    $('#bbTitle').textContent = STEPS[state.cur].t;
+    $('#bbStep').textContent = `Schritt ${state.cur + 1} von ${STEPS.length}`;
+    $('#dots').innerHTML = STEPS.map((_, i) => `<i class="${i === state.cur ? 'a' : state.done.has(i) ? 'd' : ''}"></i>`).join('');
+    const last = state.cur === STEPS.length - 1;
+    $('#bbNext').textContent = last ? 'Erstellen' : 'Weiter';
+    $('#bbNext').disabled = (state.cur === 0 && !state.person) || (last && !$('#runActive').hidden);
+    $$('.panel[data-step="0"] [data-next]').forEach(b => b.disabled = !state.person);
+  }
+
+  function go(i) {
+    if (!unlocked(i)) return;
+    state.cur = i;
+    toggleDrawer(false);
+    render();
+    const panel = $(`.panel[data-step="${i}"]`);
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function next() {
+    if (state.cur === STEPS.length - 1) return startRun();
+    if (state.cur === 0 && !state.person) return;
+    state.done.add(state.cur); go(state.cur + 1);
+  }
+  function prev() { if (state.cur > 0) go(state.cur - 1); }
+  function pick(n) { state.person = n; render(); }
+  function toggleAlbum(a) { state.albums.has(a) ? state.albums.delete(a) : state.albums.add(a); render(); }
+  function isMobile() { return $('#device').clientWidth <= 760; }
+  function toggleDrawer(open) { $('#device').classList.toggle('drawer-open', open); }
+
+  let timer;
+  function startRun() {
+    [0,1,2,3,4].forEach(i => state.done.add(i));
+    $('#runIdle').hidden = true; $('#runActive').hidden = false; render();
+    let p = 0; const labels = ['Fotos werden geladen…', 'Gesichter werden ausgerichtet…', 'Video wird erstellt…'];
+    timer = setInterval(() => {
+      p += 4; $('#bar').style.width = p + '%';
+      $('#runCount').textContent = `${Math.round(1284 * p / 100)} / 1'284`;
+      $('#runLabel').textContent = labels[p < 20 ? 0 : p < 85 ? 1 : 2];
+      if (p >= 100) { clearInterval(timer); $('#runActive').hidden = true; $('#runDone').hidden = false; state.done.add(5); render(); }
+    }, 120);
+  }
+  function resetFlow() {
+    clearInterval(timer); Object.assign(state, { cur: 0, person: null, albums: new Set(), done: new Set() });
+    $('#runIdle').hidden = false; $('#runActive').hidden = true; $('#runDone').hidden = true; $('#bar').style.width = 0; render();
+  }
+
+  function show(v) {
+    $('#landing').hidden = v !== 'landing'; $('#app').hidden = v !== 'app';
+    $$('.mock-bar [data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-next]')) next();
+    if (e.target.closest('[data-prev]')) prev();
+    const v = e.target.closest('.mock-bar [data-view]'); if (v) show(v.dataset.view);
+    const sumEl = e.target.closest('.sub > summary .toggle'); if (sumEl) { e.preventDefault(); sumEl.classList.toggle('on'); }
+  });
+  $('#startBtn').onclick = startRun;
+  $('#cancelBtn').onclick = () => { clearInterval(timer); $('#runActive').hidden = true; $('#runIdle').hidden = false; $('#bar').style.width = 0; render(); };
+  $('#phoneBtn').onclick = e => { $('#stage').classList.toggle('phone'); e.target.classList.toggle('on'); toggleDrawer(false); render(); };
+  $('#resetBtn').onclick = resetFlow;
+
+  render();
+  show('landing');
+</script>
+</body>
+</html>
