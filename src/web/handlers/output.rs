@@ -1,5 +1,6 @@
 //! Output folder and image management endpoints.
 
+use crate::utils::split_folder_version;
 use crate::web::state::{validate_path_component, AppState, JobStatus, Progress};
 use axum::{
     extract::{Path, State},
@@ -14,6 +15,10 @@ use super::StartResponse;
 #[derive(Serialize)]
 pub struct OutputFolderInfo {
     pub name: String,
+    /// Person part of the folder name (`anna` for `anna_2026-11-12_1430`).
+    pub person: String,
+    /// Version stamp (`2026-11-12_1430`), `None` for folders from before versioning.
+    pub version: Option<String>,
     pub image_count: u32,
     pub size_bytes: u64,
     pub has_video: bool,
@@ -113,8 +118,14 @@ pub async fn list_output_folders(
                 let video_filename = format!("{}.mp4", name);
                 let has_video = path_exists(&path.join(&video_filename)).await;
 
+                let (person, version) = split_folder_version(&name);
+                let person = person.to_string();
+                let version = version.map(str::to_string);
+
                 folders.push(OutputFolderInfo {
                     name,
+                    person,
+                    version,
                     image_count,
                     size_bytes,
                     has_video,
@@ -123,8 +134,14 @@ pub async fn list_output_folders(
         }
     }
 
-    // Sort by name
-    folders.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sort by person, then newest version first; folders without a version
+    // stamp (from before versioning) come last within their person.
+    folders.sort_by(|a, b| {
+        a.person
+            .cmp(&b.person)
+            .then_with(|| b.version.cmp(&a.version))
+            .then_with(|| a.name.cmp(&b.name))
+    });
 
     Ok(Json(folders))
 }
@@ -470,6 +487,7 @@ pub async fn compile_folder_video(
             total: image_count,
             message: Some(format!("Compiling video for {}...", folder_name)),
             person_name: Some(folder_name.clone()),
+            output_folder: Some(folder_name.clone()),
             ..Progress::default()
         };
         *progress = new_progress.clone();
@@ -511,6 +529,7 @@ pub async fn compile_folder_video(
                             completed: current,
                             total,
                             message: Some(format!("Compiling video for {}...", folder_clone)),
+                            output_folder: Some(folder_clone.clone()),
                             person_name: Some(folder_clone),
                             ..Progress::default()
                         })
@@ -529,6 +548,7 @@ pub async fn compile_folder_video(
                         completed: image_count,
                         total: image_count,
                         message: Some("Video compilation complete".to_string()),
+                        output_folder: Some(folder_name_clone.clone()),
                         person_name: Some(folder_name_clone),
                         ..Progress::default()
                     })
@@ -541,6 +561,7 @@ pub async fn compile_folder_video(
                             status: JobStatus::Cancelled,
                             total: image_count,
                             message: Some("Video compilation cancelled".to_string()),
+                            output_folder: Some(folder_name_clone.clone()),
                             person_name: Some(folder_name_clone),
                             ..Progress::default()
                         })
@@ -552,6 +573,7 @@ pub async fn compile_folder_video(
                             status: JobStatus::Error(e.to_string()),
                             total: image_count,
                             message: Some(format!("Video compilation failed: {}", e)),
+                            output_folder: Some(folder_name_clone.clone()),
                             person_name: Some(folder_name_clone),
                             ..Progress::default()
                         })

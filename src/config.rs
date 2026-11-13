@@ -249,6 +249,11 @@ pub struct OutputConfig {
 
     /// Keep intermediate images (original, cropped) for inspection.
     pub keep_intermediates: bool,
+
+    /// Number of versioned output folders to keep per person (0 = unlimited).
+    /// Older versions are removed after a successful run.
+    #[serde(default)]
+    pub keep_versions: u32,
 }
 
 impl Default for OutputConfig {
@@ -256,6 +261,7 @@ impl Default for OutputConfig {
         Self {
             size: 512,
             keep_intermediates: false,
+            keep_versions: 0,
         }
     }
 }

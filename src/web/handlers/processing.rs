@@ -44,6 +44,7 @@ pub struct ProgressResponse {
     pub person_name: Option<String>,
     pub album_ids: Vec<String>,
     pub album_names: Vec<String>,
+    pub output_folder: Option<String>,
 }
 
 impl From<&Progress> for ProgressResponse {
@@ -58,6 +59,7 @@ impl From<&Progress> for ProgressResponse {
             person_name: p.person_name.clone(),
             album_ids: p.album_ids.clone(),
             album_names: p.album_names.clone(),
+            output_folder: p.output_folder.clone(),
         }
     }
 }

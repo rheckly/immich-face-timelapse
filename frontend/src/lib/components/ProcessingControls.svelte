@@ -1,5 +1,4 @@
 <script>
-  import { sanitizeFolderName, formatSize } from '../utils.js';
   import { JOB_STATUS, API } from '../constants.js';
   import { handleError } from '../errorHandler.js';
 
@@ -15,12 +14,6 @@
   let isRunning = $derived(
     jobStatus === JOB_STATUS.running || jobStatus === JOB_STATUS.compiling || jobStatus === JOB_STATUS.cancelling
   );
-
-  // Check if an output folder already exists for this person
-  let existingFolder = $derived.by(() => {
-    const expectedName = sanitizeFolderName(personName, personId);
-    return outputFolders.find(f => f.name === expectedName);
-  });
 
   // Fetch asset count when personId or albums changes
   $effect(() => {
@@ -102,17 +95,9 @@
     }
   }
 
+  // Each run creates a new versioned output folder; earlier runs are kept.
   function handleStartClick() {
-    if (existingFolder) {
-      const folder = existingFolder;
-      const message = `"${folder.name}" already has ${folder.image_count} images (${formatSize(folder.size_bytes)})${folder.has_video ? ' and a compiled video' : ''}.\n\nAll existing content in ${folder.name} will be permanently deleted.\n\nClick OK to continue.`;
-
-      if (confirm(message)) {
-        startProcessing();
-      }
-    } else {
-      startProcessing();
-    }
+    startProcessing();
   }
 </script>
 

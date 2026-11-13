@@ -1,5 +1,5 @@
 <script>
-  import { formatSize } from '../utils.js';
+  import { formatSize, formatFolderVersion } from '../utils.js';
   import { showErrorAlert } from '../errorHandler.js';
   import { API } from '../constants.js';
 
@@ -41,8 +41,9 @@
 {:else}
   {#each folders as f (f.name)}
     <div class="hist" class:on={current === f.name}>
-      <button type="button" class="open" onclick={() => onopen(f.name)} title="Open result">
-        <strong>{f.name}</strong>
+      <button type="button" class="open" onclick={() => onopen(f.name)} title="Open result ({f.name})">
+        <strong>{f.person ?? f.name}</strong>
+        {#if f.version}<span class="muted ver">{formatFolderVersion(f.version)}</span>{/if}
         <span class="muted">
           {f.image_count} photos · {formatSize(f.size_bytes)}
           {#if f.has_video}<span class="badge">Video</span>{/if}

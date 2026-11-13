@@ -33,6 +33,21 @@ export function sanitizeFolderName(name, id) {
 }
 
 /**
+ * Format a version stamp of an output folder for display.
+ * `2026-11-12_1430` → `2026-11-12 14:30`, `2026-11-12_143005_2` → `2026-11-12 14:30:05 (2)`.
+ *
+ * @param {string|null} version - Version stamp from the backend (`folder.version`)
+ * @returns {string} Readable date/time, or '' for folders without version
+ */
+export function formatFolderVersion(version) {
+  if (!version) return '';
+  const m = /^(\d{4}-\d{2}-\d{2})_(\d{2})(\d{2})(\d{2})?(?:_(\d+))?$/.exec(version);
+  if (!m) return version;
+  const [, date, hh, mm, ss, n] = m;
+  return `${date} ${hh}:${mm}${ss ? `:${ss}` : ''}${n ? ` (${n})` : ''}`;
+}
+
+/**
  * Format bytes to human-readable size string.
  *
  * @param {number} bytes - Size in bytes

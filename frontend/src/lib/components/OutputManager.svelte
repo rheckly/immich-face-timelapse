@@ -1,5 +1,5 @@
 <script>
-  import { formatSize } from '../utils.js';
+  import { formatSize, formatFolderVersion } from '../utils.js';
   import { showErrorAlert } from '../errorHandler.js';
   import { API } from '../constants.js';
 
@@ -60,7 +60,12 @@
       {#each folders as folder}
         <li class="folder-item">
           <div class="folder-info">
-            <span class="folder-name">{folder.name}</span>
+            <span class="folder-name" title={folder.name}>
+              {folder.person ?? folder.name}
+              {#if folder.version}
+                <span class="folder-version">{formatFolderVersion(folder.version)}</span>
+              {/if}
+            </span>
             <span class="folder-stats">
               {folder.image_count} images • {formatSize(folder.size_bytes)}
               {#if folder.has_video}
@@ -175,6 +180,12 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+  }
+
+  .folder-version {
+    font-weight: normal;
+    color: #999;
+    margin-left: 0.4em;
   }
 
   .folder-name {

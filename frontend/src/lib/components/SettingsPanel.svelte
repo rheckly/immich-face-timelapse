@@ -120,6 +120,7 @@
           output: {
             size: Math.max(64, Math.min(4096, Number(config.processing.output.size) || 512)),
             keep_intermediates: config.processing.output.keep_intermediates,
+            keep_versions: Math.max(0, Math.floor(Number(config.processing.output.keep_versions) || 0)),
           },
           alignment: {
             eye_distance: Number(config.processing.alignment.eye_distance),
@@ -453,6 +454,16 @@
                   <span class="setting-hint">Save intermediate processing visualizations</span>
                 </label>
                 <input id="keep-intermediates" type="checkbox" bind:checked={config.processing.output.keep_intermediates} />
+              </div>
+
+              <div class="setting-row">
+                <label for="keep-versions">
+                  <span class="setting-label">Versions per Person</span>
+                  <span class="setting-hint">Output folders to keep per person, oldest removed after a run (0 = unlimited)</span>
+                </label>
+                <div class="setting-control">
+                  <input id="keep-versions" type="number" class="inline-number" min="0" step="1" bind:value={config.processing.output.keep_versions} />
+                </div>
               </div>
 
             </fieldset>

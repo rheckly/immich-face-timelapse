@@ -12,7 +12,7 @@ use crate::config::{TimeIntervalConfig, TimeRange};
 use crate::error::{Error, Result};
 use crate::immich_api::{Asset, FaceData, ImmichClient};
 use crate::pipeline::Pipeline;
-use crate::utils::sanitize_folder_name;
+use crate::utils::{sanitize_folder_name, versioned_folder_name, versions_to_prune};
 use crate::video::compile_timelapse;
 use crate::web::{AppState, AtomicSkipStats, JobStatus, Progress};
 
@@ -21,7 +21,7 @@ use processing::{process_single_asset, AssetProcessResult, DebugDirs, OutputDirs
 use chrono::NaiveDate;
 use futures_util::stream::{self, StreamExt, TryStreamExt};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 use tokio::sync::Semaphore;
@@ -134,6 +134,13 @@ pub async fn run_job(state: AppState, params: JobParams, cancel_token: Cancellat
     // Get final state from progress (skip stats and person info)
     let final_progress = state.progress.read().await.clone();
 
+    if result.is_err() {
+        if let Some(folder) = final_progress.output_folder.as_deref() {
+            let output_dir = state.config.read().await.output_dir.clone();
+            discard_empty_run_folder(&output_dir, folder).await;
+        }
+    }
+
     match result {
         Ok(output_path) => {
             state
@@ -181,15 +188,13 @@ async fn run_job_inner(
 ) -> Result<PathBuf> {
     let config = state.config.read().await.clone();
 
-    // Create person-specific output directory
-    let folder_name = sanitize_folder_name(params.person_name.as_deref(), &params.person_id);
+    // Each run gets its own versioned folder (e.g. `anna_2026-11-12_1430`),
+    // so earlier runs of the same person and their videos are kept.
+    let person_base = sanitize_folder_name(params.person_name.as_deref(), &params.person_id);
+    let now = chrono::Local::now().naive_local();
+    let folder_name =
+        versioned_folder_name(&person_base, now, |n| config.output_dir.join(n).exists());
     let person_dir = config.output_dir.join(&folder_name);
-
-    // If the folder exists, delete all its contents to start fresh
-    if person_dir.exists() {
-        tracing::info!("Removing existing folder: {}", person_dir.display());
-        tokio::fs::remove_dir_all(&person_dir).await?;
-    }
 
     // Create output directories
     let images_dir = person_dir.join("images");
@@ -215,15 +220,13 @@ async fn run_job_inner(
 
     tracing::info!("Output directory: {}", person_dir.display());
 
-    // Create Immich client
-    let client = ImmichClient::new(&config.api)?;
-
     // Base progress carrying person/album identity, reused for all updates in this job
     let params_base = Progress {
         person_id: Some(params.person_id.clone()),
         person_name: params.person_name.clone(),
         album_ids: params.album_ids.clone(),
         album_names: params.album_names.clone(),
+        output_folder: Some(folder_name.clone()),
         ..Progress::default()
     };
 
@@ -235,6 +238,10 @@ async fn run_job_inner(
             ..params_base.clone()
         })
         .await;
+
+    // Create Immich client (after the first progress update, so a failure
+    // still reports this run's output folder for cleanup)
+    let client = ImmichClient::new(&config.api)?;
 
     // Check for cancellation
     if cancel_token.is_cancelled() {
@@ -512,10 +519,71 @@ async fn run_job_inner(
             },
         )
         .await?;
+    }
 
+    prune_old_versions(
+        &config.output_dir,
+        &person_base,
+        &folder_name,
+        config.processing.output.keep_versions,
+    )
+    .await;
+
+    if config.video.enabled {
         Ok(output_dirs.video.clone())
     } else {
         Ok(output_dirs.images.clone())
+    }
+}
+
+/// Remove the oldest versioned output folders of a person beyond `keep` (0 = unlimited).
+/// Folders from before versioning (no timestamp) are never removed automatically.
+async fn prune_old_versions(output_dir: &Path, person_base: &str, current: &str, keep: u32) {
+    if keep == 0 {
+        return;
+    }
+    let Ok(mut entries) = tokio::fs::read_dir(output_dir).await else {
+        return;
+    };
+    let mut names = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if entry.file_type().await.is_ok_and(|t| t.is_dir()) {
+            names.push(entry.file_name().to_string_lossy().to_string());
+        }
+    }
+    for name in versions_to_prune(&names, person_base, current, keep) {
+        match tokio::fs::remove_dir_all(output_dir.join(&name)).await {
+            Ok(()) => tracing::info!("Removed old output version: {}", name),
+            Err(e) => tracing::warn!("Failed to remove old output version {}: {}", name, e),
+        }
+    }
+}
+
+/// Remove the output folder of a failed or cancelled run if it holds no images,
+/// so aborted runs don't leave empty versions behind.
+async fn discard_empty_run_folder(output_dir: &Path, folder_name: &str) {
+    let folder = output_dir.join(folder_name);
+    let has_images = match tokio::fs::read_dir(folder.join("images")).await {
+        Ok(mut entries) => {
+            let mut found = false;
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if entry.path().extension().is_some_and(|ext| ext == "jpg") {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        }
+        Err(_) => false,
+    };
+    if !has_images && folder.is_dir() {
+        if let Err(e) = tokio::fs::remove_dir_all(&folder).await {
+            tracing::warn!(
+                "Failed to remove empty output folder {}: {}",
+                folder_name,
+                e
+            );
+        }
     }
 }
 

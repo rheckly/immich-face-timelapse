@@ -87,9 +87,10 @@
 
   // Compute folder name from progress for video display
   let completedFolderName = $derived(
-    progress.person_name || progress.person_id
-      ? sanitizeFolderName(progress.person_name, progress.person_id)
-      : null
+    progress.output_folder ??
+      (progress.person_name || progress.person_id
+        ? sanitizeFolderName(progress.person_name, progress.person_id)
+        : null)
   );
 
   async function loadOutputFolders() {
