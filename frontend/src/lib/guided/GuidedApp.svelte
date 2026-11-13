@@ -20,7 +20,7 @@
   import ResultPane from './ResultPane.svelte';
   import HistoryPane from './HistoryPane.svelte';
   import { toPayload, FILTERS, CODECS, POSITIONS } from './config.js';
-  import { sanitizeFolderName, formatSize } from '../utils.js';
+  import { sanitizeFolderName } from '../utils.js';
   import { handleError } from '../errorHandler.js';
   import { STORAGE_KEYS, WS, JOB_STATUS, API } from '../constants.js';
 
@@ -324,7 +324,8 @@
     jobStatus === JOB_STATUS.running || jobStatus === JOB_STATUS.compiling || jobStatus === JOB_STATUS.cancelling
   );
   let completedFolderName = $derived(
-    progress.person_name || progress.person_id ? sanitizeFolderName(progress.person_name, progress.person_id) : null
+    progress.output_folder ??
+      (progress.person_name || progress.person_id ? sanitizeFolderName(progress.person_name, progress.person_id) : null)
   );
   let resultFolder = $derived(historyFolder ?? (jobStatus === JOB_STATUS.completed ? completedFolderName : null));
   let resultInfo = $derived(outputFolders.find((f) => f.name === resultFolder) ?? null);
@@ -392,11 +393,7 @@
 
   async function startProcessing() {
     if (!person) return;
-    const existing = outputFolders.find((f) => f.name === sanitizeFolderName(person.name, person.id));
-    if (existing) {
-      const message = `"${existing.name}" already has ${existing.image_count} images (${formatSize(existing.size_bytes)})${existing.has_video ? ' and a compiled video' : ''}.\n\nAll existing content in ${existing.name} will be permanently deleted.\n\nClick OK to continue.`;
-      if (!confirm(message)) return;
-    }
+    // Each run creates a new versioned output folder; earlier runs are kept.
     starting = true;
     try {
       const res = await fetch(API.start, {

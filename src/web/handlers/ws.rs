@@ -94,5 +94,6 @@ fn progress_to_response(progress: &crate::web::state::Progress) -> ProgressRespo
         person_name: progress.person_name.clone(),
         album_ids: progress.album_ids.clone(),
         album_names: progress.album_names.clone(),
+        output_folder: progress.output_folder.clone(),
     }
 }

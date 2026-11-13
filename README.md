@@ -97,7 +97,7 @@ chown -R 1000:1000 ./config ./output
 | Path | Description |
 |---|---|
 | `/app/config` | Persisted configuration file (`config.toml`) |
-| `/app/output` | Processed images and compiled timelapse video |
+| `/app/output` | Processed images and compiled timelapse video, one folder per run (`<name>_<YYYY-MM-DD_HHMM>`) |
 | `/app/music` | *(optional, read-only is fine)* Music files (mp3, m4a, aac, wav, flac, ogg, opus) to mix into the video |
 
 ### Music

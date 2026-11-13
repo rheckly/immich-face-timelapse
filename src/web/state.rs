@@ -181,6 +181,8 @@ pub struct Progress {
     /// The album filters applied (empty = no filter)
     pub album_ids: Vec<String>,
     pub album_names: Vec<String>,
+    /// Output folder of the current/last run (versioned, e.g. `anna_2026-11-12_1430`)
+    pub output_folder: Option<String>,
 }
 
 impl Default for Progress {
@@ -195,6 +197,7 @@ impl Default for Progress {
             person_name: None,
             album_ids: vec![],
             album_names: vec![],
+            output_folder: None,
         }
     }
 }

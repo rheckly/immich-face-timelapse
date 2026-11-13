@@ -18,6 +18,10 @@
 </label>
 <p class="muted">Save the intermediate processing steps next to the result.</p>
 
+<label for="g-keep-versions" class="mt">Versions per person</label>
+<input id="g-keep-versions" type="number" min="0" step="1" bind:value={config.processing.output.keep_versions} />
+<p class="muted">Every run gets its own folder. Keep only this many per person, the oldest are removed after a successful run (0 = keep all).</p>
+
 <h3 class="paneSection">Reset</h3>
 <p class="muted" style="margin-bottom:8px">Set all settings of steps 3 to 5 back to the defaults.</p>
 <button type="button" onclick={onreset}>Reset to defaults</button>

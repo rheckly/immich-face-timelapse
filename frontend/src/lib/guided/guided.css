@@ -250,6 +250,7 @@
 .guided .hist.on { border-color: var(--accent); }
 .guided .hist .open { flex: 1; min-width: 0; text-align: left; padding: 0; border: 0; background: none; }
 .guided .hist strong { display: block; overflow: hidden; text-overflow: ellipsis; }
+.guided .hist .ver { display: block; font-size: 0.85em; }
 .guided .hist .x { padding: 1px 9px; }
 .guided .badge { display: inline-block; padding: 0 6px; border-radius: 3px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 600; }
 .guided .bigCount { font-size: 18px; font-weight: 600; }

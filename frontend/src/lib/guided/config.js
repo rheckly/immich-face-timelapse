@@ -40,6 +40,7 @@ export function toPayload(config) {
       output: {
         size: Math.max(64, Math.min(4096, Number(p.output.size) || 512)),
         keep_intermediates: p.output.keep_intermediates,
+        keep_versions: Math.max(0, Math.floor(Number(p.output.keep_versions) || 0)),
       },
       alignment: {
         eye_distance: Number(p.alignment.eye_distance),
