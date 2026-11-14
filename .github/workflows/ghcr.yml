@@ -8,13 +8,16 @@ on:
     tags: ["ft-v*"]
   workflow_dispatch:
 
+# One group for all refs: a push to happy-pc and its ft-v tag would otherwise
+# run side by side, and the cleanup job of one deletes the untagged platform
+# images the other still needs for its manifest. Runs wait for each other.
 concurrency:
-  group: ghcr-${{ github.ref }}
-  cancel-in-progress: true
+  group: ghcr
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
-  REGISTRY_IMAGE: ghcr.io/rheckly/immich-automated-selfie-timelapse
+  REGISTRY_IMAGE: ghcr.io/rheckly/immich-face-timelapse
 
 jobs:
   check:
@@ -180,7 +183,7 @@ jobs:
       # images and removes untagged leftovers of older builds.
       - uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package: immich-automated-selfie-timelapse
+          package: immich-face-timelapse
           keep-n-tagged: 3
           delete-untagged: true
           token: ${{ secrets.GITHUB_TOKEN }}

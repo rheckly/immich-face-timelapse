@@ -1,171 +1,215 @@
 # Immich Face-Timelapse
 
-Based on [ArnaudCrl/immich-automated-selfie-timelapse](https://github.com/ArnaudCrl/immich-automated-selfie-timelapse). Technical names (repository, Docker image, container) are unchanged.
+***Generate timelapse videos of your loved ones' faces from your [Immich](https://immich.app/) photo library.***
 
-***Generate timelapse videos of your loved ones' portraits from your [Immich](https://immich.app/) photo library.***
+Immich Face-Timelapse is a fork of
+[ArnaudCrl/immich-automated-selfie-timelapse](https://github.com/ArnaudCrl/immich-automated-selfie-timelapse)
+by Arnaud Cayrol. The face pipeline (cropping, alignment, quality filters, video) comes from the original project;
+this fork adds a guided, bilingual (English/German) interface, intro and outro, music, sharing and more.
+See [What's different from the original](#whats-different-from-the-original).
 
-Use Immich's built-in face recognition to find all photos of a person, then runs them through a configurable processing pipeline that crops, aligns, filters, and compiles the results into a smooth timelapse video.
-
-<p align="center">
-  <img src="resources/main_view.png" alt="Main View">
-</p>
+It uses Immich's face recognition to find all photos of a person, then runs them through a configurable pipeline
+that crops, aligns, filters and compiles them into a smooth timelapse video.
 
 <p align="center">
   <img src="resources/result.gif" alt="Timelapse example" width="40%">
 </p>
 
+<!-- Screenshots of the guided view go here, e.g.:
+     resources/guided/person.png, sources.png, quality.png, pick-photos.png, result.png -->
+
 ## Features
 
-- **Face detection & cropping** - Uses Immich's face recognition metadata to locate and crop faces automatically
-- **Face alignment** - Aligns all photos based on eye positions for a stable, smooth timelapse
-- **Head pose filtering** - Skips non-front-facing photos using an ONNX deep learning model (DMHead)
-- **Blink detection** - Filters out photos where eyes are closed using Eye Aspect Ratio analysis
-- **Blur detection** - Discards blurry photos using gradient magnitude analysis (Sobel operator)
-- **Brightness filtering** - Removes photos that are too dark or overexposed
-- **Face resolution filtering** - Skips photos where the face is too small
-- **Photo limiting** - Caps photos per day/week/month to avoid over-representing busy periods
-- **Timestamp overlay** - Optionally overlays the date on each frame
-- **Video compilation** - Automatically compiles processed photos into an MP4 timelapse using FFmpeg
-- **Web UI** - Configure all settings and monitor progress through a built-in web interface
+**Face pipeline** (from the original project)
 
-<p align="center">
-  <img src="resources/processing_detail.png" alt="Processing">
-</p>
+- **Face detection & cropping** using Immich's face recognition metadata
+- **Face alignment** on the eye positions for a stable, smooth timelapse
+- **Head pose filtering** with an ONNX model (DMHead) to skip photos that don't face the camera
+- **Blink detection** (Eye Aspect Ratio), **blur detection** (Sobel), **brightness** and **face size** filters
+- **Photo limiting** per day, week or month
+- **Video compilation** to MP4 with FFmpeg
 
-## Quick Start
+**Added in this fork**
 
-### Immich API key
+- **Guided view**: step by step from person to finished video, with panels for every setting; light and dark mode;
+  English and German
+- **Photo sources**: limit the photos to albums, to photos together with other people, or (optional) to albums
+  shared with someone via Immich Smart Albums
+- **Live preview of the quality filters** on a sample photo, following the sliders instantly
+- **Pick photos** before creating the video, and re-select photos of a finished timelapse later
+- **Aspect ratios** 1:1, 4:5, 5:4, 16:9 and 9:16
+- **Date overlay** with many formats, fonts, colours and shadow
+- **Animated intro and outro** with a photo from Immich, an uploaded image or a colour, title texts and camera motion
+- **Background music** from a folder or uploaded in the UI, fit the video to the music or to a fixed length
+- **Versions and history**: every run gets its own folder; previous timelapses with details, "edit" and
+  "take over settings"
+- **Share videos** via private links on a separate port, with expiry and optional downloads
+- **Multi-arch Docker image** (amd64, arm64) on GitHub Container Registry
 
-To access your immich library, this project requires an Immich API key.  
-Follow this guide to create one: https://immich.app/docs/features/command-line-interface#obtain-the-api-key
+The full list of changes is in the app under **About → Changelog**.
 
-Here are the features that need to be enabled:
-- `album.read`
-- `asset.download`
-- `asset.read`
-- `asset.view`
-- `face.read`
-- `person.read`
-- `server.about`
+## Quick start
 
-*Note: It is advised to store this API key in a `.env` file adjacent to your `docker-compose.yml` rather than in plain text.*
+### 1. Immich API key
 
-### Docker Compose (recommended)
+Create an API key in Immich under **Account Settings → API Keys**
+([Immich docs](https://immich.app/docs/features/command-line-interface#obtain-the-api-key)).
+The app only reads from Immich; it never changes or uploads anything. These permissions are enough:
 
-Feel free to deploy this container on a more powerfull PC for faster timelapse generation. This is a 'one shot' application, it does not necessarily need to be deployed on a always on server.
+| Permission | Used for |
+|---|---|
+| `server.about` | Connection check and Immich version |
+| `person.read` | List of people and their portraits |
+| `face.read` | Face positions in the photos |
+| `asset.read` | Searching photos by person, period and album |
+| `asset.view` | Thumbnails and previews |
+| `asset.download` | Original photos for processing |
+| `album.read` | List of albums |
+
+Store the key in a `.env` file next to your `docker-compose.yml` rather than in the compose file itself:
+
+```env
+IMMICH_API_KEY=your-api-key
+```
+
+### 2. Docker Compose (recommended)
 
 ```yaml
 services:
-  immich-selfie-timelapse:
-    image: arnaudcayrol/immich-selfie-timelapse
-    container_name: immich-selfie-timelapse
+  immich-face-timelapse:
+    image: ghcr.io/rheckly/immich-face-timelapse:latest
+    container_name: immich-face-timelapse
     user: 1000:1000
     ports:
-      - "5000:5000"
+      - "5000:5000"   # web interface - keep it in your local network
+      # - "5001:5001" # optional: public share links (see "Sharing videos")
     environment:
-      - IMMICH_API_KEY=abcdefghijklmnopqrstuvwxyz
+      - IMMICH_API_KEY=${IMMICH_API_KEY}
       - IMMICH_BASE_URL=http://your-immich-host:2283
-      # optional: "Shared with" source from Immich Smart Albums
-      # - SMARTALBUMS_URL=http://your-smartalbums-host:8080
-      # - CONNECT_KEY=${CONNECT_KEY}
     volumes:
       - ./config:/app/config
       - ./output:/app/output
-      - ./music:/app/music:ro   # optional: background music
+      - ./music:/app/music   # optional: background music
     restart: unless-stopped
 ```
 
-### Docker Run
+Set the folder permissions before the first start:
+
+```bash
+mkdir -p config output music && chown -R 1000:1000 config output music
+```
+
+Then open **http://your-server:5000**.
+
+Processing is CPU-heavy. The app doesn't need to run all the time, so you can also run it on a faster PC
+just for creating timelapses.
+
+### Docker run
 
 ```bash
 docker run -d \
-  --name immich-selfie-timelapse \
+  --name immich-face-timelapse \
   -p 5000:5000 \
-  -e IMMICH_API_KEY=your-api-key-here \
-  -e IMMICH_BASE_URL=http://your_server:2283 \
-  -e SMARTALBUMS_URL=http://your_server:8080 \
-  -e CONNECT_KEY=your-connect-key \
+  -e IMMICH_API_KEY=your-api-key \
+  -e IMMICH_BASE_URL=http://your-immich-host:2283 \
   -v ./config:/app/config \
   -v ./output:/app/output \
-  -v ./music:/app/music:ro \
-  arnaudcayrol/immich-selfie-timelapse
+  -v ./music:/app/music \
+  ghcr.io/rheckly/immich-face-timelapse:latest
 ```
 
-Then open **http://your_server:5000** to access the web interface.
+### Running next to the original
+
+Image and container have their own names, so both apps can run on the same host. Map a different host port,
+e.g. `"5002:5000"`, if the original already uses 5000.
+
+## Configuration
+
+### Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `IMMICH_API_KEY` | yes | Immich API key (see above) |
+| `IMMICH_BASE_URL` | yes | Address of Immich as reachable from the container, e.g. `http://immich-server:2283` |
+| `MUSIC_DIR` | no | Music folder inside the container (default `/app/music`) |
+| `SHARE_PORT` | no | Port of the public share listener (default `5001`) |
+| `SMARTALBUMS_URL` | no | Immich Smart Albums address, enables the "Shared with" source |
+| `CONNECT_KEY` | no | Connect key of Immich Smart Albums (sent as `X-Connect-Key`) |
+| `UMAMI_URL` | no | Umami server (or its tracker script URL) for usage statistics |
+| `UMAMI_WEBSITE_ID` | no | Umami website ID; statistics are off unless both Umami variables are set |
+
+All optional features are simply hidden or off when their variables are missing.
 
 ### Volumes
 
-*Ensure correct read/write permissions to the config and output folders.*
-
-```
-chown -R 1000:1000 ./config ./output
-```
-
 | Path | Description |
 |---|---|
-| `/app/config` | Persisted configuration file (`config.toml`) |
-| `/app/output` | Processed images and compiled timelapse video, one folder per run (`<name>_<YYYY-MM-DD_HHMM>`) |
-| `/app/music` | *(optional, read-only is fine)* Music files (mp3, m4a, aac, wav, flac, ogg, opus) to mix into the video |
+| `/app/config` | Settings (`config.toml`), shared links (`shares.json`), uploaded title images, extra fonts in `config/fonts` |
+| `/app/output` | One folder per run (`<name>_<YYYY-MM-DD_HHMM>`) with video, frames and `run.json` |
+| `/app/music` | *(optional)* Music files (mp3, m4a, aac, wav, flac, ogg, opus); read-only is fine if you don't upload music in the UI |
+
+### Photo sources
+
+In the guided view you can limit the photos of a person to sources:
+
+- **Albums**: photos in one of the chosen albums
+- **People**: photos that also show one of the chosen people
+- **Shared with** *(optional)*: photos in an album shared with one of the chosen people in Immich Smart Albums
+
+A photo counts if it matches at least one chosen source; nothing chosen means all photos.
+The **Shared with** tab is only shown when `SMARTALBUMS_URL` and `CONNECT_KEY` are set.
 
 ### Music
 
-Mount a folder with audio files at `/app/music` (or set `MUSIC_DIR` to another path). In **Settings → Video** you can:
+Put audio files into the music folder or upload them in the UI. You can:
 
-- select one or more tracks; they play one after another in the numbered order (click order),
-- set the fade-out length at the end of the video,
-- enable **Fit video to music**: framerate = number of images ÷ total music length, limited to a configurable
-  minimum and maximum framerate. If the limit kicks in, the video ends before the music (minimum) or runs
-  longer than the music (maximum); the music is always cut and faded out at whichever ends first.
+- select one or more tracks; they play in the numbered order,
+- set the fade-out at the end of the video,
+- **fit the video to the music**: frame rate = number of images ÷ music length, limited to a minimum and maximum
+  frame rate, or choose a **fixed length** instead.
 
-### Photo sources (guided view)
+### Sharing videos
 
-In step 2 of the guided view you can limit the photos of the person to sources, as in Immich Mosaik:
+Finished videos can be shared with private links. Shared links are served on a **separate port** (`5001`), which
+only delivers the share page, the video and, if allowed per link, a download of the video and photos.
 
-- **Albums**: photos in one of the chosen albums,
-- **People**: photos that also show one of the chosen people,
-- **Shared with** *(optional)*: photos in an album shared with one of the chosen people in
-  Immich Smart Albums.
+To share with people outside your network:
 
-A photo counts if it matches at least one chosen source; nothing chosen means all photos.
+1. publish port 5001 (and only this port) through your reverse proxy, e.g. as `https://share.example.com`,
+2. enter this address as **public address** under **Settings** in the app.
 
-The **Shared with** tab is only shown when both environment variables are set:
+Never expose port 5000: the web interface has no login of its own.
 
-| Variable | Description |
-|---|---|
-| `SMARTALBUMS_URL` | Base URL of Smart Albums as reachable from this container, e.g. `http://smartalbums:8080` |
-| `CONNECT_KEY` | The connect key of Smart Albums (sent as `X-Connect-Key`), the same value Mosaik uses |
+### Quality settings
 
-If Smart Albums can't be reached, the tab shows the error instead of the list.
+The default filter settings are permissive because every face is different. Adjust brightness, eye aspect ratio
+etc. for the person you're processing; the live preview shows how each filter decides.
 
-### Fork image (GHCR)
+## Tips
 
-This fork publishes a multi-arch image to `ghcr.io/rheckly/immich-automated-selfie-timelapse` on every push to
-`happy-pc` (tags: `latest`, branch name, short SHA). Only the last 3 versions are kept.
+- After preparing the photos, go through them in **Pick photos** and remove the bad ones before creating the
+  video. A few outliers always pass the filters, and removing them makes a big difference.
+- The original classic single-page view is still included for now; the guided view is the default.
 
-### Settings
+## What's different from the original
 
-The default settings are quite permissive because every human being is unique.  
-Please adjust image brightness filtering, eye aspect ratio etc. for the person you are processing.
+This fork started from the original `master` and went its own way:
 
-<p align="center">
-  <img src="resources/settings_details.png" alt="Settings">
-</p>
+- new guided, bilingual interface (the classic view is kept)
+- photo sources, filter preview, photo picking, aspect ratios, date overlay, intro/outro, music upload
+- versioned output, history, shares, settings panel
+- own version numbering from 1.0.0 and its own image `ghcr.io/rheckly/immich-face-timelapse`
 
+Changes are not sent back upstream automatically. Issues about this fork belong here, not in the original project.
 
-## Additional info
+## Thanks
 
-- **To get the best results, I advise going into the galery view and quickly going through the images to remove bad ones, then hit "Compile video" at the bottom to recreate the video. There are always outliers that pass the quality filters. Removing bad photos makes a big difference in the final output.**
-- The photo filtering is not 100% accurate and will continue to improve.
-- Heartfelt thanks to the Immich team and contributors for making this project possible.
-- About contribution : When I first created this project, I marked it as open to contributions. I now realize that I don't have as much time as I thought to dedicate to this project. I feel comfortable with issues being opened as it allows me to go through them at my own pace. For pull requests, I cannot guarantee a reasonable time frame for review. 
-- Thank you thomaslrg for the discussions around the project.
-- Thank you for the ~~200~~ ~~300~~ 600 GitHub stars !
-
+- **Arnaud Cayrol** ([ArnaudCrl](https://github.com/ArnaudCrl)) for the original
+  [immich-automated-selfie-timelapse](https://github.com/ArnaudCrl/immich-automated-selfie-timelapse) and its
+  face pipeline. If you like this project, please also star the original.
+- The [Immich](https://immich.app/) team and contributors.
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ArnaudCrl/immich-automated-selfie-timelapse&type=date&legend=top-left)](https://www.star-history.com/#ArnaudCrl/immich-automated-selfie-timelapse&type=date&legend=top-left)
+[MIT License](LICENSE). Original work © 2025 Arnaud Cayrol; the license and its copyright notice stay with all
+copies and modifications.

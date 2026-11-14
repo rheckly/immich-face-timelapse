@@ -521,6 +521,7 @@ async fn share_page(
     } else {
         format!("<div class=\"dls\">{buttons}</div>\n  ")
     };
+    let umami = crate::web::analytics::share_tag();
     let html = format!(
         r#"<!DOCTYPE html>
 <html lang="de">
@@ -539,7 +540,7 @@ async fn share_page(
 <meta property="og:video:secure_url" content="{base}/video.mp4">
 <meta property="og:video:type" content="video/mp4">
 <meta name="twitter:card" content="summary_large_image">
-<style>
+{umami}<style>
   :root {{ color-scheme: dark; }}
   html, body {{ margin: 0; background: #0f0f10; color: #e8e8ea; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }}
   main {{ min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px; }}

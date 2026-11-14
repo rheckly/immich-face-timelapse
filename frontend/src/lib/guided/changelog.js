@@ -1,4 +1,4 @@
-// Changelog of the fork (rheckly/immich-automated-selfie-timelapse, branch
+// Changelog of the fork (rheckly/immich-face-timelapse, branch
 // happy-pc) since it split from the original by ArnaudCrl.
 //
 // Newest version first. Each change: type NEW (feature), CHG (change) or FIX
@@ -8,6 +8,18 @@
 // from Cargo.toml, and start a new unreleased entry when the next change comes.
 
 export const CHANGELOG = [
+  {
+    version: '1.0.1',
+    date: '2026-11-14',
+    released: true,
+    changes: [
+      { type: 'NEW', de: `Optionale Statistik mit Umami für die App und die öffentlichen Share-Seiten (Umgebungsvariablen UMAMI_URL und UMAMI_WEBSITE_ID); Share-Links werden ohne ihren geheimen Teil gemeldet.`, en: `Optional Umami statistics for the app and the public share pages (environment variables UMAMI_URL and UMAMI_WEBSITE_ID); share links are reported without their secret part.` },
+      { type: 'FIX', de: `Veröffentlichung: Die Image-Builds für Branch und Versions-Tag laufen nacheinander, damit das Aufräumen des einen nicht die Teile des anderen löscht.`, en: `Publishing: the image builds for the branch and the version tag run one after another, so the cleanup of one does not delete the parts of the other.` },
+      { type: 'CHG', de: `Repository, Docker-Image (ghcr.io/rheckly/immich-face-timelapse) und Container heissen neu «immich-face-timelapse», damit der Fork neben dem Original laufen kann; die Beispiele im README nutzen das eigene Image.`, en: `Repository, Docker image (ghcr.io/rheckly/immich-face-timelapse) and container are now called "immich-face-timelapse" so the fork can run next to the original; the README examples use the fork's own image.` },
+      { type: 'CHG', de: `README neu geschrieben: Herkunft und Dank an das Original, Funktionen des Forks, Berechtigungen des Immich-API-Schlüssels, alle Umgebungsvariablen (optionale nur bei Bedarf), Teilen über Port 5001 und Unterschiede zum Original.`, en: `README rewritten: origin and thanks to the original, features of the fork, Immich API key permissions, all environment variables (optional ones only when needed), sharing via port 5001 and differences from the original.` },
+      { type: 'NEW', de: `Lizenzhinweis im Panel «Über» (MIT, © Arnaud Cayrol und Änderungen von Roger Heckly) und eigene Copyright-Zeile für die Änderungen in der LICENSE.`, en: `License note in the "About" panel (MIT, © Arnaud Cayrol and modifications by Roger Heckly) and an own copyright line for the modifications in LICENSE.` },
+    ],
+  },
   {
     version: '1.0.0',
     date: '2026-11-14',

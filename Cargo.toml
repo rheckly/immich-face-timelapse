@@ -1,6 +1,6 @@
 [package]
 name = "immich-timelapse"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 description = "Immich Face-Timelapse: create face timelapses from Immich using face recognition and alignment"
 license = "MIT"

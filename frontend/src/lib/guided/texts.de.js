@@ -491,6 +491,8 @@ export default {
   'about.by': 'von ArnaudCrl.',
   'about.fork': 'Dieser Build ist Rogers Fork',
   'about.branch': 'Branch',
+  'about.license': 'Lizenz',
+  'about.copyright': '© 2025 Arnaud Cayrol, Änderungen © 2026 Roger Heckly.',
   'settings.title': 'Einstellungen',
   'settings.sum': 'Gelten für alle Durchläufe',
   'settings.versions': 'Versionen pro Person',

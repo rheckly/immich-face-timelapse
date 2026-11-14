@@ -7,7 +7,7 @@
   import { CHANGELOG } from './changelog.js';
 
   const UPSTREAM = 'https://github.com/ArnaudCrl/immich-automated-selfie-timelapse';
-  const FORK = 'https://github.com/rheckly/immich-automated-selfie-timelapse';
+  const FORK = 'https://github.com/rheckly/immich-face-timelapse';
 
   // immich: { status: 'checking'|'connected'|'error', version, error } from GuidedApp
   let { immich, onretry, changelogOpen = false, onchangelog } = $props();
@@ -76,8 +76,14 @@
 </p>
 <p class="mt">
   {t('about.fork')}
-  <a href={FORK} target="_blank" rel="noopener noreferrer">rheckly/immich-automated-selfie-timelapse</a>,
+  <a href={FORK} target="_blank" rel="noopener noreferrer">rheckly/immich-face-timelapse</a>,
   {t('about.branch')} <code>happy-pc</code>.
+</p>
+
+<h3 class="paneSection">{t('about.license')}</h3>
+<p>
+  <a href={`${FORK}/blob/happy-pc/LICENSE`} target="_blank" rel="noopener noreferrer">MIT License</a>.
+  {t('about.copyright')}
 </p>
 
 <div class="paneSection sectionHead">

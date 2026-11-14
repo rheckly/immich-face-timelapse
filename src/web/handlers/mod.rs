@@ -142,6 +142,7 @@ pub fn create_router(state: AppState) -> Router {
             post(upload_music_track).layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
         )
         .route("/api/fonts", get(get_fonts))
+        .route("/api/analytics", get(crate::web::analytics::get_analytics))
         .route("/api/titles/images", get(get_title_images))
         .route(
             "/api/titles/images/{filename}",

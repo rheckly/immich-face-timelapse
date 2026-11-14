@@ -1,5 +1,6 @@
 //! Web server module.
 
+pub mod analytics;
 mod handlers;
 pub mod shares;
 mod state;
