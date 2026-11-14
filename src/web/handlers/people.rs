@@ -1,5 +1,6 @@
 //! People-related endpoints (list, thumbnails, asset counts).
 
+use super::sources::{merge_ids, resolve_recipient_albums, split_ids};
 use crate::immich_api::ImmichClient;
 use crate::web::state::AppState;
 use axum::{
@@ -92,6 +93,10 @@ pub struct AssetCountResponse {
 #[derive(Deserialize)]
 pub struct AssetCountQuery {
     pub album_ids: Option<String>,
+    /// Other people: photos that also show one of them count.
+    pub people_ids: Option<String>,
+    /// People from Smart Albums: photos in an album shared with one of them count.
+    pub recipient_ids: Option<String>,
 }
 
 /// Get the count of assets for a person.
@@ -108,20 +113,15 @@ pub async fn get_person_asset_count(
         )
     })?;
 
-    // Parse comma-separated album IDs from query param
-    let album_ids: Vec<String> = query
-        .album_ids
-        .as_deref()
-        .unwrap_or("")
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .collect();
+    // Parse comma-separated IDs from the query params
+    let recipient_ids = split_ids(query.recipient_ids.as_deref());
+    let shared_album_ids = resolve_recipient_albums(&recipient_ids).await?;
+    let album_ids = merge_ids(split_ids(query.album_ids.as_deref()), shared_album_ids);
+    let people_ids = split_ids(query.people_ids.as_deref());
 
-    // Fetch assets for this person (optionally filtered by albums)
+    // Fetch assets for this person (optionally filtered by albums and other people)
     let assets = client
-        .get_assets_with_person(&person_id, None, None, &album_ids)
+        .get_assets_with_sources(&person_id, None, None, &album_ids, &people_ids)
         .await
         .map_err(|e| {
             (

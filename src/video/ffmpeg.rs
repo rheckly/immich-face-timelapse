@@ -1,6 +1,7 @@
 //! FFmpeg wrapper for video compilation.
 
-use crate::config::VideoConfig;
+use super::titles;
+use crate::config::{ApiConfig, TitleCardConfig, VideoConfig};
 use crate::error::{Error, Result};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -16,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 /// * `output_path` - Path for the output video file
 /// * `config` - Video configuration
 /// * `music_dir` - Directory containing the music tracks referenced by `config.music_tracks`
+/// * `api` - Immich connection, for intro/outro background photos
 /// * `cancel_token` - Optional cancellation token to kill the ffmpeg process
 /// * `progress_callback` - Called with (current_frame, total_frames)
 pub async fn compile_timelapse<F>(
@@ -23,6 +25,7 @@ pub async fn compile_timelapse<F>(
     output_path: &Path,
     config: &VideoConfig,
     music_dir: &Path,
+    api: &ApiConfig,
     cancel_token: Option<&CancellationToken>,
     mut progress_callback: F,
 ) -> Result<()>
@@ -53,28 +56,27 @@ where
 
     tracing::info!("Compiling {} images into video", image_count);
 
+    // Intro / outro: their length counts towards a fixed length or the music
+    let cards: Vec<(&TitleCardConfig, &str)> = [(&config.intro, "intro"), (&config.outro, "outro")]
+        .into_iter()
+        .filter(|(c, _)| c.enabled)
+        .collect();
+    let extra_secs: f64 = cards.iter().map(|(c, _)| c.duration_secs as f64).sum();
+
     // Resolve music tracks and their total length (if any were selected)
     let music = resolve_music(music_dir, &config.music_tracks).await?;
-    let framerate = compute_framerate(image_count, music.total_secs, config);
-    let audio = (!music.paths.is_empty()).then(|| AudioPlan {
-        filter: build_audio_filter(
-            music.paths.len(),
-            image_count as f64 / framerate,
-            music.total_secs,
-            config.music_fade_out_secs as f64,
-        ),
-        inputs: music.paths.clone(),
-    });
+    let framerate = compute_framerate(image_count, music.total_secs, extra_secs, config);
+    let main_secs = image_count as f64 / framerate;
 
-    if audio.is_some() {
+    if music.paths.is_empty() {
+        tracing::info!("Video framerate: {:.3} fps, no music", framerate);
+    } else {
         tracing::info!(
             "Video framerate: {:.3} fps, {} music track(s), {:.1}s of music",
             framerate,
             music.paths.len(),
             music.total_secs
         );
-    } else {
-        tracing::info!("Video framerate: {:.3} fps, no music", framerate);
     }
 
     // Create concat file for ffmpeg (more reliable than glob pattern).
@@ -103,29 +105,113 @@ where
     file.write_all(concat_content.as_bytes()).await?;
     file.flush().await?;
 
-    // Use a closure to ensure concat file is cleaned up on all paths
-    let result = run_ffmpeg(
-        &concat_path,
-        output_path,
-        config,
-        framerate,
-        audio.as_ref(),
-        cancel_token,
-        image_count,
-        &mut progress_callback,
-    )
+    let result = async {
+        let mut args: Vec<String> = vec![
+            "-f".into(),
+            "concat".into(),
+            "-safe".into(),
+            "0".into(),
+            "-i".into(),
+            concat_path.to_string_lossy().to_string(),
+        ];
+        // Holds the title backgrounds and text files until ffmpeg is done
+        let work = if cards.is_empty() {
+            None
+        } else {
+            Some(titles::WorkDir::new()?)
+        };
+        let mut filters: Vec<String> = Vec::new();
+        let video_map: String;
+        let rate: String;
+        let progress_total: u32;
+        let video_secs: f64;
+
+        if let Some(work) = &work {
+            // Title cards: everything at one constant frame rate, joined with concat
+            let (w, h) = image::image_dimensions(&image_files[0]).map_err(|e| {
+                Error::VideoCompilation(format!("Cannot read frame size: {}", e))
+            })?;
+            let fps = (framerate.round() as u32).clamp(25, 120);
+            filters.push(format!(
+                "[0:v]fps={fps},scale={w}:{h},setsar=1,format=yuv420p,setpts=PTS-STARTPTS[vmain]"
+            ));
+            let mut total = main_secs;
+            let range = titles::date_range(&image_files);
+            for (i, (card, tag)) in cards.iter().enumerate() {
+                let card = titles::with_dates(card, range.as_deref());
+                let plan =
+                    titles::plan_card(&card, api, w, h, fps, work.path(), tag, 1 + i, tag).await?;
+                tracing::info!("{} card: {:.1}s", tag, plan.duration);
+                args.extend(plan.args);
+                filters.push(plan.filter);
+                total += plan.duration;
+            }
+            let mut segments: Vec<&str> = Vec::new();
+            if config.intro.enabled {
+                segments.push("[intro]");
+            }
+            segments.push("[vmain]");
+            if config.outro.enabled {
+                segments.push("[outro]");
+            }
+            filters.push(format!(
+                "{}concat=n={}:v=1:a=0[vout]",
+                segments.concat(),
+                segments.len()
+            ));
+            video_map = "[vout]".into();
+            rate = fps.to_string();
+            progress_total = ((total * fps as f64).round() as u32).max(1);
+            video_secs = total;
+        } else {
+            video_map = "0:v".into();
+            rate = format!("{:.4}", framerate);
+            progress_total = image_count;
+            video_secs = main_secs;
+        }
+
+        let has_audio = !music.paths.is_empty();
+        if has_audio {
+            for path in &music.paths {
+                args.push("-i".into());
+                args.push(path.to_string_lossy().to_string());
+            }
+            filters.push(build_audio_filter(
+                1 + cards.len(),
+                music.paths.len(),
+                video_secs,
+                music.total_secs,
+                config.music_fade_out_secs as f64,
+            ));
+        }
+        if !filters.is_empty() {
+            args.push("-filter_complex".into());
+            args.push(filters.join(";"));
+            args.push("-map".into());
+            args.push(video_map);
+        }
+        if has_audio {
+            args.extend(["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"].map(String::from));
+        }
+
+        run_ffmpeg(
+            args,
+            output_path,
+            config,
+            rate,
+            cancel_token,
+            progress_total,
+            image_count,
+            &mut progress_callback,
+        )
+        .await
+    }
     .await;
 
     // Always clean up concat file, even on error
     let _ = tokio::fs::remove_file(&concat_path).await;
 
     result
-}
-
-/// Audio inputs and the filter graph that mixes them into the video.
-struct AudioPlan {
-    inputs: Vec<PathBuf>,
-    filter: String,
 }
 
 /// Music tracks resolved to paths, with their total duration.
@@ -161,25 +247,46 @@ async fn resolve_music(music_dir: &Path, tracks: &[String]) -> Result<ResolvedMu
 
 /// Framerate for the video.
 ///
-/// With "fit to music" enabled and music present, the framerate is chosen so the
-/// video lasts as long as the music (`images / music length`), clamped to the
-/// configured minimum and maximum. Otherwise the fixed framerate is used.
-pub fn compute_framerate(image_count: u32, music_secs: f64, config: &VideoConfig) -> f64 {
-    if config.fit_to_music && music_secs > 0.0 && image_count > 0 {
-        let min = config.min_framerate as f64;
-        let max = (config.max_framerate as f64).max(min);
-        (image_count as f64 / music_secs).clamp(min, max)
+/// - "Fixed length": the framerate is chosen so the video lasts
+///   `target_duration_secs` (`images / length`).
+/// - "Fit to music" (with music present): the video lasts as long as the music.
+///
+/// Both are clamped to the configured minimum and maximum; a fixed length wins
+/// over fitting to the music. Otherwise the fixed framerate is used.
+/// `extra_secs` (intro and outro) is taken off the target length.
+pub fn compute_framerate(
+    image_count: u32,
+    music_secs: f64,
+    extra_secs: f64,
+    config: &VideoConfig,
+) -> f64 {
+    let target = if image_count == 0 {
+        None
+    } else if config.fit_to_duration && config.target_duration_secs > 0.0 {
+        Some(config.target_duration_secs as f64)
+    } else if config.fit_to_music && music_secs > 0.0 {
+        Some(music_secs)
     } else {
-        config.framerate as f64
+        None
+    };
+    match target.map(|secs| (secs - extra_secs).max(1.0)) {
+        Some(secs) => {
+            let min = config.min_framerate as f64;
+            let max = (config.max_framerate as f64).max(min);
+            (image_count as f64 / secs).clamp(min, max)
+        }
+        None => config.framerate as f64,
     }
 }
 
 /// Build the `-filter_complex` graph for the music.
 ///
-/// Audio inputs start at ffmpeg input index 1 (index 0 is the image sequence).
+/// Audio inputs start at ffmpeg input index `first_input` (index 0 is the image
+/// sequence, title cards come before the music).
 /// Each track is normalized to 48 kHz stereo, the tracks are concatenated in
 /// order, cut to the video length and faded out at the end.
 pub fn build_audio_filter(
+    first_input: usize,
     track_count: usize,
     video_secs: f64,
     music_secs: f64,
@@ -189,7 +296,7 @@ pub fn build_audio_filter(
     for i in 0..track_count {
         filter.push_str(&format!(
             "[{}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a{}];",
-            i + 1,
+            first_input + i,
             i
         ));
     }
@@ -210,48 +317,32 @@ pub fn build_audio_filter(
 }
 
 /// Run the ffmpeg process and handle progress/cancellation.
+///
+/// `args` holds the inputs, filters and maps; `progress_total` is the number of
+/// frames ffmpeg writes, reported to the callback scaled to `image_count`.
 #[allow(clippy::too_many_arguments)]
 async fn run_ffmpeg<F>(
-    concat_path: &Path,
+    args: Vec<String>,
     output_path: &Path,
     config: &VideoConfig,
-    framerate: f64,
-    audio: Option<&AudioPlan>,
+    rate: String,
     cancel_token: Option<&CancellationToken>,
+    progress_total: u32,
     image_count: u32,
     progress_callback: &mut F,
 ) -> Result<()>
 where
     F: FnMut(u32, u32),
 {
-    // Build ffmpeg command using concat demuxer
+    // Write to `<name>.part.mp4` and rename it at the end: a failed or
+    // cancelled run (or a second compile) never destroys the previous video
+    // and never leaves a broken one under the real name.
+    let part = part_path(output_path);
     let mut cmd = Command::new("ffmpeg");
-    cmd.arg("-y") // Overwrite output
-        .arg("-f")
-        .arg("concat")
-        .arg("-safe")
-        .arg("0") // Allow absolute paths
-        .arg("-i")
-        .arg(concat_path);
-
-    if let Some(audio) = audio {
-        for input in &audio.inputs {
-            cmd.arg("-i").arg(input);
-        }
-        cmd.arg("-filter_complex")
-            .arg(&audio.filter)
-            .arg("-map")
-            .arg("0:v")
-            .arg("-map")
-            .arg("[aout]")
-            .arg("-c:a")
-            .arg("aac")
-            .arg("-b:a")
-            .arg("192k");
-    }
-
-    cmd.arg("-r")
-        .arg(format!("{:.4}", framerate))
+    cmd.arg("-y") // Overwrite a leftover part file
+        .args(&args)
+        .arg("-r")
+        .arg(rate)
         .arg("-c:v")
         .arg(&config.codec)
         .arg("-crf")
@@ -260,7 +351,7 @@ where
         .arg("yuv420p")
         .arg("-progress")
         .arg("pipe:1")
-        .arg(output_path)
+        .arg(&part)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -301,6 +392,7 @@ where
             _ = token.cancelled() => {
                 // Kill the ffmpeg process on cancellation
                 let _ = child.kill().await;
+                let _ = tokio::fs::remove_file(&part).await;
                 return Err(Error::Cancelled);
             }
             line = reader.next_line() => {
@@ -309,7 +401,9 @@ where
                         if line.starts_with("frame=") {
                             if let Some(frame_str) = line.strip_prefix("frame=") {
                                 if let Ok(frame) = frame_str.trim().parse::<u32>() {
-                                    let clamped_frame = frame.min(image_count);
+                                    let scaled = u64::from(frame) * u64::from(image_count)
+                                        / u64::from(progress_total.max(1));
+                                    let clamped_frame = (scaled as u32).min(image_count);
                                     progress_callback(clamped_frame, image_count);
                                 }
                             }
@@ -329,16 +423,45 @@ where
         let error_lines: Vec<&str> = stderr_output.lines().rev().take(10).collect();
         let error_detail = error_lines.into_iter().rev().collect::<Vec<_>>().join("\n");
 
+        let _ = tokio::fs::remove_file(&part).await;
         return Err(Error::FFmpeg(format!(
             "ffmpeg exited with status {}\n{}",
             status, error_detail
         )));
     }
 
+    tokio::fs::rename(&part, output_path).await?;
     progress_callback(image_count, image_count);
     tracing::info!("Video compilation complete: {:?}", output_path);
 
     Ok(())
+}
+
+/// `<folder>/<name>.part.<ext>` next to the final file (`anna.mp4` -> `anna.part.mp4`),
+/// keeping the extension so ffmpeg still knows the format.
+fn part_path(output_path: &Path) -> PathBuf {
+    let stem = output_path
+        .file_stem()
+        .map_or_else(|| "video".into(), |s| s.to_string_lossy());
+    let name = match output_path.extension() {
+        Some(ext) => format!("{}.part.{}", stem, ext.to_string_lossy()),
+        None => format!("{}.part", stem),
+    };
+    output_path.with_file_name(name)
+}
+
+#[cfg(test)]
+mod part_path_tests {
+    use super::part_path;
+    use std::path::Path;
+
+    #[test]
+    fn keeps_the_extension() {
+        assert_eq!(
+            part_path(Path::new("/out/anna_2026-11-12_1430/anna_2026-11-12_1430.mp4")),
+            Path::new("/out/anna_2026-11-12_1430/anna_2026-11-12_1430.part.mp4")
+        );
+    }
 }
 
 /// Check if ffmpeg is available.
@@ -447,7 +570,7 @@ mod tests {
     #[test]
     fn framerate_fixed_without_fit() {
         let config = VideoConfig::default();
-        assert_eq!(compute_framerate(300, 60.0, &config), 20.0);
+        assert_eq!(compute_framerate(300, 60.0, 0.0, &config), 20.0);
     }
 
     #[test]
@@ -459,18 +582,36 @@ mod tests {
             ..VideoConfig::default()
         };
         // 600 images over 60s of music = 10 fps
-        assert!((compute_framerate(600, 60.0, &config) - 10.0).abs() < 1e-9);
+        assert!((compute_framerate(600, 60.0, 0.0, &config) - 10.0).abs() < 1e-9);
         // 6000 images over 60s = 100 fps -> clamped to max
-        assert_eq!(compute_framerate(6000, 60.0, &config), 30.0);
+        assert_eq!(compute_framerate(6000, 60.0, 0.0, &config), 30.0);
         // 60 images over 60s = 1 fps -> clamped to min
-        assert_eq!(compute_framerate(60, 60.0, &config), 5.0);
+        assert_eq!(compute_framerate(60, 60.0, 0.0, &config), 5.0);
         // no music -> fixed framerate
-        assert_eq!(compute_framerate(600, 0.0, &config), 20.0);
+        assert_eq!(compute_framerate(600, 0.0, 0.0, &config), 20.0);
+    }
+
+    #[test]
+    fn framerate_fixed_length_wins_over_music() {
+        let config = VideoConfig {
+            fit_to_duration: true,
+            target_duration_secs: 30.0,
+            fit_to_music: true,
+            min_framerate: 1.0,
+            max_framerate: 60.0,
+            ..VideoConfig::default()
+        };
+        // 600 images in 30s = 20 fps, music length ignored
+        assert!((compute_framerate(600, 120.0, 0.0, &config) - 20.0).abs() < 1e-9);
+        // also without music
+        assert!((compute_framerate(300, 0.0, 0.0, &config) - 10.0).abs() < 1e-9);
+        // 6000 images in 30s = 200 fps -> clamped to max
+        assert_eq!(compute_framerate(6000, 0.0, 0.0, &config), 60.0);
     }
 
     #[test]
     fn audio_filter_single_track_fades_at_video_end() {
-        let f = build_audio_filter(1, 30.0, 120.0, 3.0);
+        let f = build_audio_filter(1, 1, 30.0, 120.0, 3.0);
         assert!(f.starts_with("[1:a]aresample=48000"));
         assert!(f.contains("concat=n=1:v=0:a=1,atrim=0:30.000"));
         assert!(f.contains("afade=t=out:st=27.000:d=3.000"));
@@ -480,7 +621,7 @@ mod tests {
     #[test]
     fn audio_filter_multiple_tracks_short_music() {
         // Music shorter than the video: fade at the end of the music
-        let f = build_audio_filter(2, 100.0, 50.0, 5.0);
+        let f = build_audio_filter(1, 2, 100.0, 50.0, 5.0);
         assert!(f.contains("[2:a]aresample"));
         assert!(f.contains("[a0][a1]concat=n=2"));
         assert!(f.contains("atrim=0:50.000"));
@@ -488,8 +629,28 @@ mod tests {
     }
 
     #[test]
+    fn framerate_leaves_room_for_titles() {
+        let config = VideoConfig {
+            fit_to_duration: true,
+            target_duration_secs: 40.0,
+            min_framerate: 1.0,
+            max_framerate: 60.0,
+            ..VideoConfig::default()
+        };
+        // 40s minus 10s of intro/outro: 600 images in 30s = 20 fps
+        assert!((compute_framerate(600, 0.0, 10.0, &config) - 20.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn audio_filter_after_title_inputs() {
+        let f = build_audio_filter(3, 2, 30.0, 60.0, 0.0);
+        assert!(f.starts_with("[3:a]aresample"));
+        assert!(f.contains("[4:a]aresample"));
+    }
+
+    #[test]
     fn audio_filter_no_fade() {
-        let f = build_audio_filter(1, 10.0, 20.0, 0.0);
+        let f = build_audio_filter(1, 1, 10.0, 20.0, 0.0);
         assert!(!f.contains("afade"));
     }
 }

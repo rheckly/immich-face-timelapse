@@ -3,7 +3,7 @@
 use crate::utils::split_folder_version;
 use crate::web::state::{validate_path_component, AppState, JobStatus, Progress};
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
@@ -22,6 +22,17 @@ pub struct OutputFolderInfo {
     pub image_count: u32,
     pub size_bytes: u64,
     pub has_video: bool,
+    /// From run.json (all `None` for folders from before it existed):
+    /// the person's name as shown in Immich (`Jürg Baumann`, not `jurg_baumann`),
+    pub display_name: Option<String>,
+    /// when the run started and finished (RFC 3339; no `finished` while it
+    /// runs or when it was cancelled or failed)
+    pub created: Option<String>,
+    pub finished: Option<String>,
+    /// and the length of its video in seconds.
+    pub video_secs: Option<f64>,
+    /// Whether the folder has a run.json.
+    pub has_run: bool,
 }
 
 /// Image information for gallery view.
@@ -122,6 +133,20 @@ pub async fn list_output_folders(
                 let person = person.to_string();
                 let version = version.map(str::to_string);
 
+                let run = crate::run_info::read(&path).await;
+                let text = |v: Option<&serde_json::Value>| {
+                    v.and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                };
+                let display_name = run.as_ref().and_then(|r| text(r.get("person_name")));
+                let created = run.as_ref().and_then(|r| text(r.get("created")));
+                let result = run.as_ref().and_then(|r| r.get("result"));
+                let finished = text(result.and_then(|r| r.get("finished")));
+                let video_secs = result
+                    .and_then(|r| r.get("video_secs"))
+                    .and_then(|v| v.as_f64());
+
                 folders.push(OutputFolderInfo {
                     name,
                     person,
@@ -129,6 +154,11 @@ pub async fn list_output_folders(
                     image_count,
                     size_bytes,
                     has_video,
+                    display_name,
+                    created,
+                    finished,
+                    video_secs,
+                    has_run: run.is_some(),
                 });
             }
         }
@@ -438,10 +468,129 @@ pub async fn delete_images_bulk(
     }))
 }
 
+/// Sub folder for photos the user took out before the video was made.
+const EXCLUDED_DIR: &str = "excluded";
+
+/// The `.jpg` file names in a folder, sorted (empty if it does not exist).
+async fn jpg_names(dir: &std::path::Path) -> Vec<String> {
+    let mut names = Vec::new();
+    if let Ok(mut entries) = tokio::fs::read_dir(dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if entry.path().extension().is_some_and(|ext| ext == "jpg") {
+                names.push(entry.file_name().to_string_lossy().to_string());
+            }
+        }
+    }
+    names.sort();
+    names
+}
+
+/// `GET /api/output/{folder}/run`: the run's settings (`run.json`); 404 for
+/// folders from before it existed.
+pub async fn get_run_info(
+    State(state): State<AppState>,
+    Path(folder_name): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    validate_path_component(&folder_name, "folder name")
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let folder = state.config.read().await.output_dir.join(&folder_name);
+    crate::run_info::read(&folder)
+        .await
+        .map(Json)
+        .ok_or((StatusCode::NOT_FOUND, "No run information".to_string()))
+}
+
+/// Photos of a folder: the ones used for the video and the ones taken out.
+#[derive(Serialize, Deserialize)]
+pub struct Selection {
+    #[serde(default)]
+    pub images: Vec<String>,
+    pub excluded: Vec<String>,
+}
+
+/// `GET /api/output/{folder}/selection`
+pub async fn get_selection(
+    State(state): State<AppState>,
+    Path(folder_name): Path<String>,
+) -> Result<Json<Selection>, (StatusCode, String)> {
+    validate_path_component(&folder_name, "folder name")
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let folder = state.config.read().await.output_dir.join(&folder_name);
+    if !path_exists(&folder.join("images")).await {
+        return Err((StatusCode::NOT_FOUND, format!("Folder '{}' has no images", folder_name)));
+    }
+    Ok(Json(Selection {
+        images: jpg_names(&folder.join("images")).await,
+        excluded: jpg_names(&folder.join(EXCLUDED_DIR)).await,
+    }))
+}
+
+/// `PUT /api/output/{folder}/selection`: the named photos move to `excluded/`,
+/// all others back to `images/`. Nothing is deleted.
+pub async fn put_selection(
+    State(state): State<AppState>,
+    Path(folder_name): Path<String>,
+    Json(request): Json<Selection>,
+) -> Result<Json<Selection>, (StatusCode, String)> {
+    validate_path_component(&folder_name, "folder name")
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    for name in &request.excluded {
+        validate_path_component(name, "filename")
+            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    }
+    {
+        let progress = state.progress.read().await;
+        let busy = matches!(progress.status, JobStatus::Running | JobStatus::CompilingVideo)
+            && !progress.awaiting_review
+            && progress.output_folder.as_deref() == Some(folder_name.as_str());
+        if busy {
+            return Err((StatusCode::CONFLICT, "This folder is being processed".to_string()));
+        }
+    }
+    let folder = state.config.read().await.output_dir.join(&folder_name);
+    let images = folder.join("images");
+    let excluded = folder.join(EXCLUDED_DIR);
+    if !path_exists(&images).await {
+        return Err((StatusCode::NOT_FOUND, format!("Folder '{}' has no images", folder_name)));
+    }
+    let wanted: std::collections::HashSet<&str> =
+        request.excluded.iter().map(String::as_str).collect();
+    let io = |e: std::io::Error| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    for name in jpg_names(&images).await {
+        if wanted.contains(name.as_str()) {
+            tokio::fs::create_dir_all(&excluded).await.map_err(io)?;
+            tokio::fs::rename(images.join(&name), excluded.join(&name))
+                .await
+                .map_err(io)?;
+        }
+    }
+    for name in jpg_names(&excluded).await {
+        if !wanted.contains(name.as_str()) {
+            tokio::fs::rename(excluded.join(&name), images.join(&name))
+                .await
+                .map_err(io)?;
+        }
+    }
+    Ok(Json(Selection {
+        images: jpg_names(&images).await,
+        excluded: jpg_names(&excluded).await,
+    }))
+}
+
+/// Options for compiling a folder's video.
+#[derive(Deserialize, Default)]
+pub struct CompileQuery {
+    /// Finish a run that waited for the photo selection: report it like the
+    /// end of that run and drop the frames if they should not be kept.
+    #[serde(default)]
+    pub finish: bool,
+}
+
 /// Compile video for a specific output folder.
 pub async fn compile_folder_video(
     State(state): State<AppState>,
     Path(folder_name): Path<String>,
+    Query(query): Query<CompileQuery>,
 ) -> Result<Json<StartResponse>, (StatusCode, String)> {
     validate_path_component(&folder_name, "folder name")
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
@@ -479,31 +628,50 @@ pub async fn compile_folder_video(
     // to prevent TOCTOU race conditions between concurrent requests.
     {
         let mut progress = state.progress.write().await;
-        if progress.status == JobStatus::Running || progress.status == JobStatus::CompilingVideo {
+        if progress.status.is_active() && !progress.awaiting_review
+        {
             return Err((StatusCode::CONFLICT, "A job is already running".to_string()));
         }
+        // Finishing the run that waited for the selection keeps its person and counts
+        let carry = query.finish && progress.output_folder.as_deref() == Some(folder_name.as_str());
+        let base = if carry {
+            progress.clone()
+        } else {
+            Progress {
+                person_name: Some(folder_name.clone()),
+                ..Progress::default()
+            }
+        };
         let new_progress = Progress {
             status: JobStatus::CompilingVideo,
+            completed: 0,
             total: image_count,
             message: Some(format!("Compiling video for {}...", folder_name)),
-            person_name: Some(folder_name.clone()),
             output_folder: Some(folder_name.clone()),
-            ..Progress::default()
+            awaiting_review: false,
+            video_started_at: Some(unix_millis()),
+            video_millis: None,
+            video_secs: None,
+            ..base
         };
         *progress = new_progress.clone();
         let _ = state.progress_tx.send(new_progress);
     }
 
     // Create cancellation token
-    let cancel_token = state.create_cancel_token().await;
+    let (job_id, cancel_token) = state.create_cancel_token().await;
 
     // Clone values needed for the async task
     let video_config = config.video.clone();
     let music_dir = config.music_dir.clone();
+    let api_config = config.api.clone();
     let video_filename = format!("{}.mp4", folder_name);
     let output_path = folder_path.join(&video_filename);
     let job_state = state.clone();
-    let folder_name_clone = folder_name.clone();
+    let base = state.progress.read().await.clone();
+    let keep_frames = config.processing.output.keep_frames;
+    let finish = query.finish;
+    let started = std::time::Instant::now();
 
     // Spawn the compilation job in the background
     tokio::spawn(async move {
@@ -512,6 +680,7 @@ pub async fn compile_folder_video(
             &output_path,
             &video_config,
             &music_dir,
+            &api_config,
             Some(&cancel_token),
             |current, total| {
                 // Check for cancellation
@@ -521,19 +690,14 @@ pub async fn compile_folder_video(
 
                 // Update progress (fire and forget since we're in sync callback)
                 let state_clone = job_state.clone();
-                let folder_clone = folder_name_clone.clone();
+                let update = Progress {
+                    status: JobStatus::CompilingVideo,
+                    completed: current,
+                    total,
+                    ..base.clone()
+                };
                 tokio::spawn(async move {
-                    state_clone
-                        .update_progress(Progress {
-                            status: JobStatus::CompilingVideo,
-                            completed: current,
-                            total,
-                            message: Some(format!("Compiling video for {}...", folder_clone)),
-                            output_folder: Some(folder_clone.clone()),
-                            person_name: Some(folder_clone),
-                            ..Progress::default()
-                        })
-                        .await;
+                    state_clone.update_progress(update).await;
                 });
             },
         )
@@ -542,15 +706,28 @@ pub async fn compile_folder_video(
         // Update final status
         match result {
             Ok(_) => {
+                let video_secs = crate::video::probe_duration(&output_path).await.ok();
+                let excluded = jpg_names(&folder_path.join(EXCLUDED_DIR)).await.len();
+                crate::run_info::update(&folder_path, |run| {
+                    run["result"]["kept"] = serde_json::json!(image_count);
+                    run["result"]["excluded"] = serde_json::json!(excluded);
+                    run["result"]["video_secs"] = serde_json::json!(video_secs);
+                    run["result"]["finished"] = serde_json::json!(chrono::Local::now().to_rfc3339());
+                })
+                .await;
+                if finish && !keep_frames {
+                    crate::job::remove_frames(&images_dir).await;
+                    let _ = tokio::fs::remove_dir_all(folder_path.join(EXCLUDED_DIR)).await;
+                }
                 job_state
                     .update_progress(Progress {
                         status: JobStatus::Completed,
                         completed: image_count,
                         total: image_count,
                         message: Some("Video compilation complete".to_string()),
-                        output_folder: Some(folder_name_clone.clone()),
-                        person_name: Some(folder_name_clone),
-                        ..Progress::default()
+                        video_millis: Some(started.elapsed().as_millis() as u64),
+                        video_secs,
+                        ..base.clone()
                     })
                     .await;
             }
@@ -561,9 +738,7 @@ pub async fn compile_folder_video(
                             status: JobStatus::Cancelled,
                             total: image_count,
                             message: Some("Video compilation cancelled".to_string()),
-                            output_folder: Some(folder_name_clone.clone()),
-                            person_name: Some(folder_name_clone),
-                            ..Progress::default()
+                            ..base.clone()
                         })
                         .await;
                 } else {
@@ -573,20 +748,25 @@ pub async fn compile_folder_video(
                             status: JobStatus::Error(e.to_string()),
                             total: image_count,
                             message: Some(format!("Video compilation failed: {}", e)),
-                            output_folder: Some(folder_name_clone.clone()),
-                            person_name: Some(folder_name_clone),
-                            ..Progress::default()
+                            ..base.clone()
                         })
                         .await;
                 }
             }
         }
 
-        job_state.clear_cancel_token().await;
+        job_state.clear_cancel_token(job_id).await;
     });
 
     Ok(Json(StartResponse {
         success: true,
         message: format!("Video compilation started for '{}'", folder_name),
     }))
+}
+
+/// Current time as Unix milliseconds (0 if the clock is before 1970).
+fn unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }

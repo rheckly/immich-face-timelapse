@@ -17,6 +17,10 @@ pub struct AlbumInfo {
     pub name: String,
     pub asset_count: u32,
     pub thumbnail_asset_id: Option<String>,
+    /// Date of the oldest photo, missing for empty albums.
+    pub start_date: Option<String>,
+    /// Date of the newest photo, missing for empty albums.
+    pub end_date: Option<String>,
 }
 
 /// Get list of albums from Immich.
@@ -43,6 +47,8 @@ pub async fn get_albums(
             name: a.album_name,
             asset_count: a.asset_count,
             thumbnail_asset_id: a.album_thumbnail_asset_id,
+            start_date: a.start_date,
+            end_date: a.end_date,
         })
         .collect();
 

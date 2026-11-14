@@ -3,7 +3,7 @@
 use crate::config::{
     AlignmentConfig, BlurConfig, BrightnessConfig, CropConfig, EyeFilterConfig,
     FaceResolutionConfig, HeadPoseConfig, OutputConfig, ProcessingConfig, TimeIntervalConfig,
-    TimestampConfig, VideoConfig, CONFIG_PATH,
+    TimestampConfig, TitleCardConfig, VideoConfig, CONFIG_PATH,
 };
 use crate::web::state::{validate_path_component, AppState};
 use axum::{extract::State, http::StatusCode, response::Json};
@@ -70,8 +70,12 @@ pub struct VideoConfigUpdate {
     pub music_tracks: Option<Vec<String>>,
     pub music_fade_out_secs: Option<f32>,
     pub fit_to_music: Option<bool>,
+    pub fit_to_duration: Option<bool>,
+    pub target_duration_secs: Option<f32>,
     pub min_framerate: Option<f32>,
     pub max_framerate: Option<f32>,
+    pub intro: Option<TitleCardConfig>,
+    pub outro: Option<TitleCardConfig>,
 }
 
 /// Validation error with field name and message.
@@ -200,6 +204,17 @@ fn validate_processing_config(proc: &ProcessingConfigUpdate) -> Result<(), Valid
         }
     }
 
+    if let Some(ref ts) = proc.timestamp {
+        if let Some(size) = ts.font_size {
+            if !crate::config::TimestampConfig::FONT_SIZE_RANGE.contains(&size) {
+                return Err(ValidationError::new(
+                    "processing.timestamp.font_size",
+                    format!("must be between 0.5 and 20 percent, got {}", size),
+                ));
+            }
+        }
+    }
+
     if let Some(ref pl) = proc.time_interval {
         if pl.enabled && pl.max_photos == 0 {
             return Err(ValidationError::new(
@@ -274,6 +289,15 @@ fn validate_video_config(vid: &VideoConfigUpdate) -> Result<(), ValidationError>
                 "video.codec",
                 format!("must be one of: {}, got '{}'", valid_codecs.join(", "), v),
             ));
+        }
+    }
+    for (field, which, card) in [
+        ("video.intro", "Intro", &vid.intro),
+        ("video.outro", "Outro", &vid.outro),
+    ] {
+        if let Some(card) = card {
+            card.validate(which)
+                .map_err(|e| ValidationError::new(field, e.to_string()))?;
         }
     }
     Ok(())
@@ -385,11 +409,23 @@ pub async fn update_config(
             if let Some(v) = vid.fit_to_music {
                 config.video.fit_to_music = v;
             }
+            if let Some(v) = vid.fit_to_duration {
+                config.video.fit_to_duration = v;
+            }
+            if let Some(v) = vid.target_duration_secs {
+                config.video.target_duration_secs = v;
+            }
             if let Some(v) = vid.min_framerate {
                 config.video.min_framerate = v;
             }
             if let Some(v) = vid.max_framerate {
                 config.video.max_framerate = v;
+            }
+            if let Some(v) = vid.intro.clone() {
+                config.video.intro = v;
+            }
+            if let Some(v) = vid.outro.clone() {
+                config.video.outro = v;
             }
         }
 

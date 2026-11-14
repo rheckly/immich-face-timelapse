@@ -82,18 +82,5 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
 /// Convert Progress to ProgressResponse for JSON serialization.
 fn progress_to_response(progress: &crate::web::state::Progress) -> ProgressResponse {
-    use crate::web::handlers::SkipStatsResponse;
-
-    ProgressResponse {
-        status: progress.status.as_str().to_string(),
-        completed: progress.completed,
-        total: progress.total,
-        message: progress.message.clone(),
-        skip_stats: SkipStatsResponse::from(&progress.skip_stats),
-        person_id: progress.person_id.clone(),
-        person_name: progress.person_name.clone(),
-        album_ids: progress.album_ids.clone(),
-        album_names: progress.album_names.clone(),
-        output_folder: progress.output_folder.clone(),
-    }
+    ProgressResponse::from(progress)
 }

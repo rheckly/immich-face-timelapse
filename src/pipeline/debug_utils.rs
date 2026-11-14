@@ -39,6 +39,20 @@ pub fn face_rect_pixels(
 /// * `text` - The text to draw
 /// * `color` - The color to use
 pub fn draw_simple_text(img: &mut RgbImage, x: u32, y: u32, text: &str, color: Rgb<u8>) {
+    draw_scaled_text(img, x, y, text, color, 1);
+}
+
+/// Draw text with the 5x7 pixel font, each font pixel drawn as a `scale` x `scale`
+/// block. A character takes `6 * scale` pixels across and `7 * scale` down.
+pub fn draw_scaled_text(
+    img: &mut RgbImage,
+    x: u32,
+    y: u32,
+    text: &str,
+    color: Rgb<u8>,
+    scale: u32,
+) {
+    let scale = scale.max(1);
     let (width, height) = (img.width(), img.height());
     let mut cursor_x = x;
 
@@ -46,16 +60,19 @@ pub fn draw_simple_text(img: &mut RgbImage, x: u32, y: u32, text: &str, color: R
         let pattern = get_char_pattern(ch);
         for (row_idx, row) in pattern.iter().enumerate() {
             for col in 0..5 {
-                if (row >> (4 - col)) & 1 == 1 {
-                    let px = cursor_x + col;
-                    let py = y + row_idx as u32;
-                    if px < width && py < height {
+                if (row >> (4 - col)) & 1 == 0 {
+                    continue;
+                }
+                let left = cursor_x + col * scale;
+                let top = y + row_idx as u32 * scale;
+                for py in top..(top + scale).min(height) {
+                    for px in left..(left + scale).min(width) {
                         img.put_pixel(px, py, color);
                     }
                 }
             }
         }
-        cursor_x += 6; // 5 pixels wide + 1 pixel spacing
+        cursor_x += 6 * scale; // 5 pixels wide + 1 pixel spacing
     }
 }
 
@@ -127,6 +144,9 @@ fn get_char_pattern(ch: char) -> [u8; 7] {
         ],
         '-' => [
             0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000,
+        ],
+        '/' => [
+            0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000,
         ],
         '°' => [
             0b00110, 0b01001, 0b01001, 0b00110, 0b00000, 0b00000, 0b00000,
@@ -249,6 +269,18 @@ fn get_char_pattern(ch: char) -> [u8; 7] {
 mod tests {
     use super::*;
     use image::RgbImage;
+
+    #[test]
+    fn test_draw_scaled_text_size() {
+        let mut img = RgbImage::new(40, 40);
+        let white = Rgb([255, 255, 255]);
+        draw_scaled_text(&mut img, 0, 0, "1", white, 3);
+        // "1" has its bottom row fully set from column 1 to 3: 9 pixels at scale 3
+        let bottom: Vec<u32> = (0..18).filter(|&x| img.get_pixel(x, 20)[0] == 255).collect();
+        assert_eq!(bottom, (3..12).collect::<Vec<u32>>());
+        // Nothing below the 7 rows of the font
+        assert!((0..40).all(|x| img.get_pixel(x, 21)[0] == 0));
+    }
 
     #[test]
     fn test_draw_simple_text() {

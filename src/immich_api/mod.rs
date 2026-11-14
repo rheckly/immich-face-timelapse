@@ -4,6 +4,7 @@ use crate::config::ApiConfig;
 use crate::error::{Error, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::time::Duration;
 use urlencoding::encode as urlencode;
 
@@ -38,6 +39,30 @@ pub struct Album {
     pub album_name: String,
     pub asset_count: u32,
     pub album_thumbnail_asset_id: Option<String>,
+    /// Date of the oldest photo. Immich leaves it out for empty albums.
+    #[serde(default)]
+    pub start_date: Option<String>,
+    /// Date of the newest photo. Immich leaves it out for empty albums.
+    #[serde(default)]
+    pub end_date: Option<String>,
+}
+
+/// A photo offered in the picker (album contents, smart search).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PickAsset {
+    pub id: String,
+    #[serde(rename(deserialize = "type"), default)]
+    pub kind: String,
+    #[serde(rename(deserialize = "originalFileName"), default)]
+    pub file_name: Option<String>,
+    #[serde(rename(deserialize = "localDateTime"), default)]
+    pub date: Option<String>,
+}
+
+impl PickAsset {
+    fn is_image(a: &PickAsset) -> bool {
+        a.kind.is_empty() || a.kind == "IMAGE"
+    }
 }
 
 /// Asset data from Immich. Obtained from /search/metadata Immich endpoint.
@@ -110,6 +135,48 @@ pub struct SearchParams {
     pub asset_type: String,
     pub page: u32,
     pub size: u32,
+}
+
+/// One Immich search: assets showing all `person_ids`, optionally only in one album.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceQuery {
+    pub person_ids: Vec<String>,
+    pub album_id: Option<String>,
+}
+
+/// The searches whose merged results are the person's assets from the chosen sources.
+///
+/// A photo counts if it is in one of the albums or also shows one of the other people.
+/// Without sources (or only the person themself), one search returns all of their assets.
+pub fn source_queries(
+    person_id: &str,
+    album_ids: &[String],
+    also_people: &[String],
+) -> Vec<SourceQuery> {
+    let mut queries: Vec<SourceQuery> = Vec::new();
+    let albums = album_ids.iter().map(|album_id| SourceQuery {
+        person_ids: vec![person_id.to_string()],
+        album_id: Some(album_id.clone()),
+    });
+    let people = also_people
+        .iter()
+        .filter(|other| other.as_str() != person_id)
+        .map(|other| SourceQuery {
+            person_ids: vec![person_id.to_string(), other.clone()],
+            album_id: None,
+        });
+    for query in albums.chain(people) {
+        if !queries.contains(&query) {
+            queries.push(query);
+        }
+    }
+    if queries.is_empty() {
+        queries.push(SourceQuery {
+            person_ids: vec![person_id.to_string()],
+            album_id: None,
+        });
+    }
+    queries
 }
 
 impl ImmichClient {
@@ -191,55 +258,68 @@ impl ImmichClient {
         taken_before: Option<&str>,
         album_ids: &[String],
     ) -> Result<Vec<Asset>> {
+        self.get_assets_with_sources(person_id, taken_after, taken_before, album_ids, &[])
+            .await
+    }
+
+    /// Search for assets of a person that come from at least one of the chosen sources:
+    /// in one of the albums, or also showing one of the other people.
+    ///
+    /// Without sources, all assets of the person are returned. Each source is a separate
+    /// search; the results are merged by asset ID.
+    pub async fn get_assets_with_sources(
+        &self,
+        person_id: &str,
+        taken_after: Option<&str>,
+        taken_before: Option<&str>,
+        album_ids: &[String],
+        also_people: &[String],
+    ) -> Result<Vec<Asset>> {
         // Immich requires full ISO 8601 datetimes, but callers pass plain
         // `YYYY-MM-DD` dates (e.g. from an HTML date input), so widen them
         // to cover the whole day.
         let taken_after = taken_after.map(|d| format!("{d}T00:00:00.000Z"));
         let taken_before = taken_before.map(|d| format!("{d}T23:59:59.999Z"));
-        let taken_after = taken_after.as_deref();
-        let taken_before = taken_before.as_deref();
 
-        if album_ids.len() <= 1 {
-            // 0 or 1 album: single request
-            let album_id = album_ids.first().map(|s| s.as_str());
-            self.search_person_assets(person_id, taken_after, taken_before, album_id)
-                .await
-        } else {
-            // Multiple albums: fetch per album and merge by asset ID
-            use std::collections::HashSet;
-            let mut all_assets: Vec<Asset> = Vec::new();
-            let mut seen_ids: HashSet<String> = HashSet::new();
-
-            for album_id in album_ids {
-                let assets = self
-                    .search_person_assets(
-                        person_id,
-                        taken_after,
-                        taken_before,
-                        Some(album_id.as_str()),
-                    )
-                    .await?;
-                for asset in assets {
-                    if seen_ids.insert(asset.id.clone()) {
-                        all_assets.push(asset);
-                    }
+        let queries = source_queries(person_id, album_ids, also_people);
+        let mut all_assets: Vec<Asset> = Vec::new();
+        let mut seen_ids: HashSet<String> = HashSet::new();
+        for query in &queries {
+            let assets = self
+                .search_assets(
+                    &query.person_ids,
+                    taken_after.as_deref(),
+                    taken_before.as_deref(),
+                    query.album_id.as_deref(),
+                )
+                .await?;
+            for asset in assets {
+                if seen_ids.insert(asset.id.clone()) {
+                    all_assets.push(asset);
                 }
             }
-
-            tracing::debug!(
-                "Found {} merged assets for person {} across {} albums",
-                all_assets.len(),
-                person_id,
-                album_ids.len()
-            );
-            Ok(all_assets)
         }
+
+        tracing::debug!(
+            "Found {} merged assets for person {} across {} searches",
+            all_assets.len(),
+            person_id,
+            queries.len()
+        );
+        Ok(all_assets)
     }
 
-    /// Fetch all paginated assets for a person, with an optional single album filter.
-    async fn search_person_assets(
+    /// Count the assets that show all of the given people.
+    pub async fn count_assets_with_people(&self, person_ids: &[String]) -> Result<u32> {
+        let assets = self.search_assets(person_ids, None, None, None).await?;
+        Ok(assets.len() as u32)
+    }
+
+    /// Fetch all paginated assets that show all of the given people, with an optional
+    /// single album filter.
+    async fn search_assets(
         &self,
-        person_id: &str,
+        person_ids: &[String],
         taken_after: Option<&str>,
         taken_before: Option<&str>,
         album_id: Option<&str>,
@@ -249,7 +329,7 @@ impl ImmichClient {
 
         loop {
             let params = SearchParams {
-                person_ids: Some(vec![person_id.to_string()]),
+                person_ids: Some(person_ids.to_vec()),
                 album_ids: album_id.map(|id| vec![id.to_string()]),
                 taken_after: taken_after.map(|s| s.to_string()),
                 taken_before: taken_before.map(|s| s.to_string()),
@@ -282,7 +362,11 @@ impl ImmichClient {
             }
         }
 
-        tracing::debug!("Found {} assets for person {}", all_assets.len(), person_id);
+        tracing::debug!(
+            "Found {} assets for people {:?}",
+            all_assets.len(),
+            person_ids
+        );
         Ok(all_assets)
     }
 
@@ -418,6 +502,100 @@ impl ImmichClient {
         Ok((bytes, content_type))
     }
 
+    /// Photos of an album, in album order (videos left out).
+    pub async fn get_album_assets(&self, album_id: &str) -> Result<Vec<PickAsset>> {
+        // Newer Immich no longer lists the assets in GET /albums/{id};
+        // /search/metadata with albumIds works on all versions.
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Page {
+            items: Vec<PickAsset>,
+            #[serde(default)]
+            next_page: Option<serde_json::Value>,
+        }
+        #[derive(Deserialize)]
+        struct Resp {
+            assets: Page,
+        }
+
+        let url = format!("{}/search/metadata", self.base_url);
+        let mut out = Vec::new();
+        let mut page = 1u32;
+        loop {
+            let body = serde_json::json!({
+                "albumIds": [album_id],
+                "type": "IMAGE",
+                "page": page,
+                "size": 1000,
+            });
+            let response = self
+                .client
+                .post(&url)
+                .header("x-api-key", &self.api_key)
+                .json(&body)
+                .send()
+                .await?;
+            let response = Self::check_response_error(response, "Album assets").await?;
+            let resp: Resp = response.json().await?;
+            out.extend(resp.assets.items.into_iter().filter(PickAsset::is_image));
+            let more = resp.assets.next_page.is_some_and(|v| !v.is_null());
+            if !more || page >= 50 {
+                break;
+            }
+            page += 1;
+        }
+        Ok(out)
+    }
+
+    /// Smart search (CLIP) over the whole library, photos only.
+    pub async fn smart_search(&self, query: &str, size: u32) -> Result<Vec<PickAsset>> {
+        let url = format!("{}/search/smart", self.base_url);
+        let body = serde_json::json!({ "query": query, "type": "IMAGE", "size": size });
+        let response = self
+            .client
+            .post(&url)
+            .header("x-api-key", &self.api_key)
+            .json(&body)
+            .send()
+            .await?;
+        let response = Self::check_response_error(response, "Smart search").await?;
+
+        #[derive(Deserialize)]
+        struct Items {
+            items: Vec<PickAsset>,
+        }
+        #[derive(Deserialize)]
+        struct SmartResponse {
+            assets: Items,
+        }
+        let found: SmartResponse = response.json().await?;
+        Ok(found.assets.items.into_iter().filter(PickAsset::is_image).collect())
+    }
+
+    /// Small thumbnail of an asset (`size=thumbnail`), with its content type.
+    pub async fn get_asset_thumbnail(&self, asset_id: &str) -> Result<(bytes::Bytes, String)> {
+        let url = format!(
+            "{}/assets/{}/thumbnail?size=thumbnail",
+            self.base_url,
+            urlencode(asset_id)
+        );
+        let response = self
+            .client
+            .get(&url)
+            .header("x-api-key", &self.api_key)
+            .send()
+            .await?;
+        let response = Self::check_response_error(response, "Get asset thumbnail").await?;
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("image/jpeg")
+            .to_string();
+        let bytes = response.bytes().await?;
+        Ok((bytes, content_type))
+    }
+
     /// Get all people from Immich.
     pub async fn get_people(&self) -> Result<Vec<Person>> {
         let url = format!("{}/people", self.base_url);
@@ -508,6 +686,60 @@ mod tests {
         assert_eq!(
             ImmichClient::sanitize_base_url("http://example.com/immich/"),
             "http://example.com/immich/api"
+        );
+    }
+
+    fn ids(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn test_source_queries_without_sources() {
+        assert_eq!(
+            source_queries("me", &[], &[]),
+            vec![SourceQuery {
+                person_ids: ids(&["me"]),
+                album_id: None,
+            }]
+        );
+        // Choosing only the person themself is the same as no filter
+        assert_eq!(source_queries("me", &[], &ids(&["me"])).len(), 1);
+    }
+
+    #[test]
+    fn test_source_queries_albums_and_people() {
+        let queries = source_queries("me", &ids(&["a1", "a2", "a1"]), &ids(&["p1", "me", "p1"]));
+        assert_eq!(
+            queries,
+            vec![
+                SourceQuery {
+                    person_ids: ids(&["me"]),
+                    album_id: Some("a1".to_string()),
+                },
+                SourceQuery {
+                    person_ids: ids(&["me"]),
+                    album_id: Some("a2".to_string()),
+                },
+                SourceQuery {
+                    person_ids: ids(&["me", "p1"]),
+                    album_id: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_album_dates_are_optional() {
+        let json = r#"[
+            {"id":"a","albumName":"Empty","assetCount":0,"albumThumbnailAssetId":null},
+            {"id":"b","albumName":"Trip","assetCount":3,"albumThumbnailAssetId":"t",
+             "startDate":"2024-05-01T10:00:00.000Z","endDate":"2024-06-02T10:00:00.000Z"}
+        ]"#;
+        let albums: Vec<Album> = serde_json::from_str(json).unwrap();
+        assert_eq!(albums[0].start_date, None);
+        assert_eq!(
+            albums[1].end_date.as_deref(),
+            Some("2024-06-02T10:00:00.000Z")
         );
     }
 

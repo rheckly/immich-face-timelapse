@@ -6,6 +6,7 @@ use axum::{extract::State, http::StatusCode, response::Json};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::sources::{merge_ids, resolve_recipient_albums};
 use super::StartResponse;
 
 /// Skip statistics for API response.
@@ -45,6 +46,10 @@ pub struct ProgressResponse {
     pub album_ids: Vec<String>,
     pub album_names: Vec<String>,
     pub output_folder: Option<String>,
+    pub video_started_at: Option<u64>,
+    pub video_millis: Option<u64>,
+    pub video_secs: Option<f64>,
+    pub awaiting_review: bool,
 }
 
 impl From<&Progress> for ProgressResponse {
@@ -60,6 +65,10 @@ impl From<&Progress> for ProgressResponse {
             album_ids: p.album_ids.clone(),
             album_names: p.album_names.clone(),
             output_folder: p.output_folder.clone(),
+            video_started_at: p.video_started_at,
+            video_millis: p.video_millis,
+            video_secs: p.video_secs,
+            awaiting_review: p.awaiting_review,
         }
     }
 }
@@ -78,10 +87,23 @@ pub struct StartRequest {
     pub date_to: Option<String>,
     pub album_ids: Vec<String>,
     pub album_names: Vec<String>,
+    /// Other people: photos that also show one of them count.
+    #[serde(default)]
+    pub people_ids: Vec<String>,
+    /// People from Smart Albums: photos in an album shared with one of them count.
+    #[serde(default)]
+    pub recipient_ids: Vec<String>,
+    /// Stop after preparing the photos, so they can be picked before the video is made.
+    #[serde(default)]
+    pub review: bool,
+    /// What the user chose in the browser (person, sources, period), stored with
+    /// the run so its settings can be taken over later. Not read by the server.
+    #[serde(default)]
+    pub source: Option<serde_json::Value>,
 }
 
 /// Validate that a person_id looks reasonable (non-empty, reasonable length, safe characters).
-fn validate_person_id(person_id: &str) -> Result<(), (StatusCode, String)> {
+pub(super) fn validate_person_id(person_id: &str) -> Result<(), (StatusCode, String)> {
     if person_id.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -114,11 +136,16 @@ pub async fn start_processing(
 ) -> Result<Json<StartResponse>, (StatusCode, String)> {
     validate_person_id(&request.person_id)?;
 
+    // Albums shared with the chosen people count like chosen albums
+    let shared_album_ids = resolve_recipient_albums(&request.recipient_ids).await?;
+
     // Atomically check-and-set: hold write lock across both check and status update
     // to prevent TOCTOU race conditions between concurrent requests.
     {
         let mut progress = state.progress.write().await;
-        if progress.status == JobStatus::Running || progress.status == JobStatus::CompilingVideo {
+        // Also while the previous job is still cancelling: it clears its token
+        // and writes its final status only when it has stopped.
+        if progress.status.is_active() {
             return Err((StatusCode::CONFLICT, "A job is already running".to_string()));
         }
         let new_progress = Progress {
@@ -135,7 +162,7 @@ pub async fn start_processing(
     }
 
     // Create cancellation token
-    let cancel_token = state.create_cancel_token().await;
+    let (job_id, cancel_token) = state.create_cancel_token().await;
 
     tracing::info!(
         "Starting processing for person {} (date range: {:?} - {:?})",
@@ -150,13 +177,16 @@ pub async fn start_processing(
         person_name: request.person_name,
         date_from: request.date_from,
         date_to: request.date_to,
-        album_ids: request.album_ids,
+        album_ids: merge_ids(request.album_ids, shared_album_ids),
         album_names: request.album_names,
+        people_ids: request.people_ids,
+        review: request.review,
+        source: request.source,
     };
 
     let job_state = state.clone();
     tokio::spawn(async move {
-        run_job(job_state, job_params, cancel_token).await;
+        run_job(job_state, job_params, job_id, cancel_token).await;
     });
 
     Ok(Json(StartResponse {

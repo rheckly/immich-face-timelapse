@@ -52,6 +52,9 @@ pub enum Error {
 
     #[error("Job cancelled")]
     Cancelled,
+
+    #[error("{0}")]
+    SmartAlbums(String),
 }
 
 impl Error {

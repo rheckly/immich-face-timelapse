@@ -22,6 +22,8 @@ use tokio_util::sync::CancellationToken;
 pub struct OutputDirs {
     /// Directory for final processed images (used for video)
     pub images: PathBuf,
+    /// Directory for the downloaded photos, if they are kept
+    pub originals: Option<PathBuf>,
     /// Path for output video
     pub video: PathBuf,
     /// Optional debug directories for visualizing processing stages.
@@ -125,6 +127,9 @@ pub async fn process_single_asset(
         }
     };
 
+    // Kept for originals/ (Bytes clones share the buffer)
+    let original_bytes = output_dirs.originals.as_ref().map(|_| image_bytes.clone());
+
     // Set raw bytes on context
     ctx = ctx.with_bytes(image_bytes);
 
@@ -206,6 +211,14 @@ pub async fn process_single_asset(
                 };
             }
 
+            if let (Some(dir), Some(bytes)) = (&output_dirs.originals, original_bytes) {
+                let ext = original_extension(asset, config.processing.use_preview, &bytes);
+                let path = dir.join(format!("{}_{}.{}", safe_timestamp, asset_id, ext));
+                if let Err(e) = tokio::fs::write(&path, &bytes).await {
+                    tracing::warn!("Failed to save original {}: {}", path.display(), e);
+                }
+            }
+
             skip_stats.increment_kept();
             AssetProcessResult::Success { asset_id }
         }
@@ -215,4 +228,24 @@ pub async fn process_single_asset(
         PipelineResult::Error { asset_id, error } => AssetProcessResult::Error { asset_id, error },
         PipelineResult::Cancelled { asset_id } => AssetProcessResult::Cancelled { asset_id },
     }
+}
+
+/// File extension for a saved original: the preview is always a JPEG, an
+/// original keeps the extension of its file name in Immich.
+fn original_extension(asset: &Asset, use_preview: bool, bytes: &[u8]) -> String {
+    if use_preview {
+        return "jpg".to_string();
+    }
+    let from_name = asset
+        .original_file_name
+        .as_deref()
+        .and_then(|n| n.rsplit_once('.'))
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .filter(|e| !e.is_empty() && e.len() <= 5 && e.chars().all(|c| c.is_ascii_alphanumeric()));
+    from_name.unwrap_or_else(|| match image::guess_format(bytes) {
+        Ok(ImageFormat::Png) => "png".to_string(),
+        Ok(ImageFormat::WebP) => "webp".to_string(),
+        Ok(ImageFormat::Jpeg) => "jpg".to_string(),
+        _ => "bin".to_string(),
+    })
 }

@@ -84,6 +84,25 @@ async fn main() -> anyhow::Result<()> {
     // Create router
     let app = web::create_router(state.clone());
 
+    // Public listener for shared links (only /s/<token>, see web::shares)
+    let share_addr = SocketAddr::from(([0, 0, 0, 0], web::shares::share_port()));
+    match tokio::net::TcpListener::bind(share_addr).await {
+        Ok(share_listener) => {
+            tracing::info!("Share links served on http://{}", share_addr);
+            let public = web::shares::public_router(state.clone());
+            tokio::spawn(async move {
+                if let Err(e) = axum::serve(share_listener, public).await {
+                    tracing::warn!("Share listener stopped: {}", e);
+                }
+            });
+        }
+        Err(e) => tracing::warn!(
+            "Cannot open share port {}: {} - shared links unavailable",
+            share_addr,
+            e
+        ),
+    }
+
     // Start server
     let addr = SocketAddr::from(([0, 0, 0, 0], 5000));
     tracing::info!("Starting server on http://{}", addr);

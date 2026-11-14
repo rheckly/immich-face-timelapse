@@ -241,32 +241,101 @@ impl CropConfig {
     }
 }
 
+/// Aspect ratio of the output frames, written as width:height.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum AspectRatio {
+    /// Square frames (the original format).
+    #[default]
+    #[serde(rename = "1:1")]
+    Square,
+    /// Portrait 4:5, as used by Instagram posts.
+    #[serde(rename = "4:5")]
+    Portrait4x5,
+    /// Landscape 5:4.
+    #[serde(rename = "5:4")]
+    Landscape5x4,
+    /// Widescreen 16:9.
+    #[serde(rename = "16:9")]
+    Landscape16x9,
+    /// Vertical 9:16, as used by phone stories and reels.
+    #[serde(rename = "9:16")]
+    Portrait9x16,
+}
+
+impl AspectRatio {
+    /// The width and height parts of the ratio, e.g. `(16, 9)`.
+    pub fn parts(self) -> (u32, u32) {
+        match self {
+            Self::Square => (1, 1),
+            Self::Portrait4x5 => (4, 5),
+            Self::Landscape5x4 => (5, 4),
+            Self::Landscape16x9 => (16, 9),
+            Self::Portrait9x16 => (9, 16),
+        }
+    }
+}
+
 /// Output/resize configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputConfig {
-    /// Output image size (width and height in pixels).
+    /// Output image size in pixels: the long edge of the frame (width and height
+    /// for square frames).
     pub size: u32,
+
+    /// Aspect ratio of the frames. The long edge is `size`.
+    #[serde(default)]
+    pub aspect_ratio: AspectRatio,
 
     /// Keep intermediate images (original, cropped) for inspection.
     pub keep_intermediates: bool,
 
     /// Number of versioned output folders to keep per person (0 = unlimited).
-    /// Older versions are removed after a successful run.
-    #[serde(default)]
+    /// Older versions are removed after a successful run. Default 5, so the
+    /// disk does not fill up unnoticed.
+    #[serde(default = "default_keep_versions")]
     pub keep_versions: u32,
+
+    /// Also save the downloaded photo of every frame in `originals/`.
+    #[serde(default)]
+    pub keep_originals: bool,
+
+    /// Keep the processed frames in `images/` after the video was made.
+    /// Without a video they are the result and always stay.
+    #[serde(default = "default_true")]
+    pub keep_frames: bool,
 }
 
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
             size: 512,
+            aspect_ratio: AspectRatio::Square,
             keep_intermediates: false,
-            keep_versions: 0,
+            keep_versions: default_keep_versions(),
+            keep_originals: false,
+            keep_frames: true,
         }
     }
 }
 
 impl OutputConfig {
+    /// Frame width and height in pixels. The long edge is `size`, the short edge
+    /// follows the aspect ratio. Both are even, as the video encoders need it.
+    pub fn dimensions(&self) -> (u32, u32) {
+        let (w, h) = self.aspect_ratio.parts();
+        let long = u64::from(self.size);
+        let short = |a: u32, b: u32| {
+            let exact = (long * u64::from(a) + u64::from(b) / 2) / u64::from(b);
+            u32::try_from(exact).unwrap_or(u32::MAX)
+        };
+        let even = |v: u32| (v & !1).max(2);
+        if w >= h {
+            (even(self.size), even(short(h, w)))
+        } else {
+            (even(short(w, h)), even(self.size))
+        }
+    }
+
     /// Validate the configuration values.
     pub fn validate(&self) -> Result<()> {
         if self.size < 64 {
@@ -431,8 +500,10 @@ impl AlignmentConfig {
 pub enum TextPosition {
     #[default]
     TopLeft,
+    TopCenter,
     TopRight,
     BottomLeft,
+    BottomCenter,
     BottomRight,
 }
 
@@ -455,6 +526,70 @@ pub struct TimestampConfig {
 
     /// Whether to display the day.
     pub day: bool,
+
+    /// Height of the text in percent of the frame height. `None` keeps the
+    /// original fixed size of 7 pixels.
+    #[serde(default)]
+    pub font_size: Option<f32>,
+
+    /// How the date is written.
+    #[serde(default)]
+    pub format: DateFormat,
+
+    /// Font file (as listed by `/api/fonts`). Empty keeps the built-in pixel font.
+    #[serde(default)]
+    pub font: String,
+
+    /// Text colour as hex "rrggbb".
+    #[serde(default = "default_date_color")]
+    pub color: String,
+
+    /// Dark shadow behind the text.
+    #[serde(default = "default_true")]
+    pub shadow: bool,
+
+    /// Language of month and weekday names ("de" or "en").
+    #[serde(default = "default_date_lang")]
+    pub lang: String,
+}
+
+fn default_date_color() -> String {
+    "ffffff".to_string()
+}
+
+fn default_date_lang() -> String {
+    "de".to_string()
+}
+
+/// How the date in the frames is written (example: 17 May 2024).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DateFormat {
+    /// 2024-05-17
+    #[default]
+    Iso,
+    /// 17.05.2024
+    DmyDot,
+    /// 17.5.2024
+    DmyDotShort,
+    /// 17.05.24
+    DmyDotYy,
+    /// 17-05-2024
+    DmyDash,
+    /// 17/05/2024
+    DmySlash,
+    /// 05-17-2024
+    MdyDash,
+    /// 05/17/2024
+    MdySlash,
+    /// 17. Mai 2024
+    Long,
+    /// 17. Mai 2024 / 3. Sept. 2024
+    LongShort,
+    /// Mai 2024
+    MonthYear,
+    /// Freitag, 17. Mai 2024
+    Weekday,
 }
 
 impl Default for TimestampConfig {
@@ -465,14 +600,35 @@ impl Default for TimestampConfig {
             year: true,
             month: true,
             day: true,
+            font_size: None,
+            format: DateFormat::Iso,
+            font: String::new(),
+            color: default_date_color(),
+            shadow: true,
+            lang: default_date_lang(),
         }
     }
 }
 
 impl TimestampConfig {
+    /// Smallest and largest font size in percent of the frame height.
+    pub const FONT_SIZE_RANGE: std::ops::RangeInclusive<f32> = 0.5..=20.0;
+
     /// Validate the configuration values.
     pub fn validate(&self) -> Result<()> {
-        // No validation needed for booleans and enum
+        if let Some(size) = self.font_size {
+            if !Self::FONT_SIZE_RANGE.contains(&size) {
+                return Err(Error::Config(
+                    "Timestamp font_size must be between 0.5 and 20 percent".to_string(),
+                ));
+            }
+        }
+        let c = self.color.trim_start_matches('#');
+        if c.len() != 6 || !c.chars().all(|ch| ch.is_ascii_hexdigit()) {
+            return Err(Error::Config(
+                "Timestamp color must be a hex colour like ffffff".to_string(),
+            ));
+        }
         Ok(())
     }
 }
@@ -636,6 +792,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_keep_versions() -> u32 {
+    5
+}
+
 // ============================================================================
 // Video Configuration
 // ============================================================================
@@ -667,11 +827,149 @@ pub struct VideoConfig {
     /// clamped to `[min_framerate, max_framerate]`. Ignored without music.
     pub fit_to_music: bool,
 
-    /// Lowest framerate allowed when fitting the video to the music.
+    /// Fixed video length: framerate = image count / `target_duration_secs`,
+    /// clamped to `[min_framerate, max_framerate]`. Takes precedence over
+    /// `fit_to_music`.
+    pub fit_to_duration: bool,
+
+    /// Wanted video length in seconds, used with `fit_to_duration`.
+    pub target_duration_secs: f32,
+
+    /// Lowest framerate allowed when fitting the video to the music or a length.
     pub min_framerate: f32,
 
-    /// Highest framerate allowed when fitting the video to the music.
+    /// Highest framerate allowed when fitting the video to the music or a length.
     pub max_framerate: f32,
+
+    /// Title card shown before the timelapse.
+    pub intro: TitleCardConfig,
+
+    /// Closing card shown after the timelapse.
+    pub outro: TitleCardConfig,
+}
+
+/// An animated title card (intro or outro): a background image, or a plain
+/// colour, with a title, subtitle and an optional longer text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TitleCardConfig {
+    /// Whether the card is added to the video.
+    pub enabled: bool,
+    /// Immich asset used as background image.
+    pub asset_id: Option<String>,
+    /// Uploaded background image (file name in the title image folder).
+    /// Used when `asset_id` is empty.
+    pub upload: Option<String>,
+    /// Length of the card in seconds.
+    pub duration_secs: f32,
+    pub title: String,
+    pub subtitle: String,
+    /// Longer text below the subtitle, may span several lines.
+    pub text: String,
+    /// Font file name (e.g. `DejaVuSans-Bold.ttf`), see `/api/fonts`.
+    pub font: String,
+    /// Colour of the title as `#rrggbb`.
+    pub color: String,
+    /// Colour of the subtitle as `#rrggbb`; empty = like the title.
+    pub subtitle_color: String,
+    /// Colour of the longer text as `#rrggbb`; empty = like the title.
+    pub text_color: String,
+    /// Background colour as `#rrggbb`, used without an image.
+    pub background: String,
+    /// Title height in percent of the frame height; subtitle and text are smaller.
+    pub size: f32,
+    /// Darkening of the background image so the text stays readable (0 – 0.9).
+    pub dim: f32,
+    /// Slow movement of the background image (off = still image).
+    pub zoom: bool,
+    /// Kind of movement when `zoom` is on: `auto` (pan along the photo's
+    /// format and zoom towards the face), `zoom` (into the middle),
+    /// `pan_right`, `pan_left`, `pan_down`, `pan_up` (camera pan, like in
+    /// Memories) or `random` (one of the pans).
+    pub motion: String,
+    /// Add a line with the date of the oldest and the newest photo below the text.
+    pub dates: bool,
+}
+
+impl Default for TitleCardConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            asset_id: None,
+            upload: None,
+            duration_secs: 5.0,
+            title: String::new(),
+            subtitle: String::new(),
+            text: String::new(),
+            font: "DejaVuSans-Bold.ttf".to_string(),
+            color: "#ffffff".to_string(),
+            subtitle_color: String::new(),
+            text_color: String::new(),
+            background: "#000000".to_string(),
+            size: 8.0,
+            dim: 0.15,
+            zoom: true,
+            motion: "auto".to_string(),
+            dates: false,
+        }
+    }
+}
+
+/// `#rrggbb` → `rrggbb`, None for anything else.
+pub fn hex_color(value: &str) -> Option<&str> {
+    let hex = value.strip_prefix('#')?;
+    (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())).then_some(hex)
+}
+
+/// A plain file name: no folders, no leading dot, no control characters.
+pub fn plain_file_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 200
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains('\'')
+        && !name.chars().any(|c| c.is_control())
+}
+
+impl TitleCardConfig {
+    /// Validate the card; `which` is `intro` or `outro` for the messages.
+    pub fn validate(&self, which: &str) -> Result<()> {
+        let err = |m: &str| Err(Error::Config(format!("{}: {}", which, m)));
+        if !(1.0..=30.0).contains(&self.duration_secs) {
+            return err("length must be between 1 and 30 seconds");
+        }
+        if !(2.0..=25.0).contains(&self.size) {
+            return err("text size must be between 2 and 25 %");
+        }
+        if !(0.0..=0.9).contains(&self.dim) {
+            return err("darkening must be between 0 and 0.9");
+        }
+        if hex_color(&self.color).is_none() || hex_color(&self.background).is_none() {
+            return err("colours must be given as #rrggbb");
+        }
+        if !self.font.is_empty() && !plain_file_name(&self.font) {
+            return err("invalid font name");
+        }
+        if let Some(id) = &self.asset_id {
+            if id.is_empty()
+                || id.len() > 64
+                || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            {
+                return err("invalid asset id");
+            }
+        }
+        if let Some(name) = &self.upload {
+            if !plain_file_name(name) {
+                return err("invalid image name");
+            }
+        }
+        if self.title.len() > 300 || self.subtitle.len() > 300 || self.text.len() > 3000 {
+            return err("text is too long");
+        }
+        Ok(())
+    }
 }
 
 impl Default for VideoConfig {
@@ -684,8 +982,12 @@ impl Default for VideoConfig {
             music_tracks: Vec::new(),
             music_fade_out_secs: 3.0,
             fit_to_music: false,
+            fit_to_duration: false,
+            target_duration_secs: 30.0,
             min_framerate: 5.0,
             max_framerate: 30.0,
+            intro: TitleCardConfig::default(),
+            outro: TitleCardConfig::default(),
         }
     }
 }
@@ -723,6 +1025,11 @@ impl VideoConfig {
                 "Music fade-out must be between 0 and 30 seconds".to_string(),
             ));
         }
+        if !(1.0..=3600.0).contains(&self.target_duration_secs) {
+            return Err(Error::Config(
+                "Video length must be between 1 and 3600 seconds".to_string(),
+            ));
+        }
         let fps_ok = |v: f32| v > 0.0 && v <= 120.0;
         if !fps_ok(self.min_framerate) || !fps_ok(self.max_framerate) {
             return Err(Error::Config(
@@ -746,6 +1053,8 @@ impl VideoConfig {
                 )));
             }
         }
+        self.intro.validate("Intro")?;
+        self.outro.validate("Outro")?;
         Ok(())
     }
 }
@@ -960,6 +1269,61 @@ mod tests {
         // Too large
         config.size = 8192;
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_output_dimensions() {
+        let mut config = OutputConfig::default();
+        assert_eq!(config.dimensions(), (512, 512));
+
+        config.size = 1080;
+        config.aspect_ratio = AspectRatio::Landscape16x9;
+        assert_eq!(config.dimensions(), (1080, 608)); // 607.5 rounds to 608
+        config.aspect_ratio = AspectRatio::Portrait9x16;
+        assert_eq!(config.dimensions(), (608, 1080));
+        config.aspect_ratio = AspectRatio::Portrait4x5;
+        assert_eq!(config.dimensions(), (864, 1080));
+        config.aspect_ratio = AspectRatio::Landscape5x4;
+        assert_eq!(config.dimensions(), (1080, 864));
+
+        // Odd sizes become even for the video encoders
+        config.size = 513;
+        config.aspect_ratio = AspectRatio::Square;
+        assert_eq!(config.dimensions(), (512, 512));
+        config.size = 100;
+        config.aspect_ratio = AspectRatio::Landscape16x9;
+        assert_eq!(config.dimensions(), (100, 56));
+    }
+
+    #[test]
+    fn test_new_fields_default_when_missing() {
+        let output: OutputConfig =
+            serde_json::from_str(r#"{"size": 512, "keep_intermediates": false}"#).unwrap();
+        assert_eq!(output.aspect_ratio, AspectRatio::Square);
+        assert!(output.keep_frames && !output.keep_originals);
+        let json = r#"{"size": 512, "aspect_ratio": "9:16", "keep_intermediates": false}"#;
+        let output: OutputConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(output.aspect_ratio, AspectRatio::Portrait9x16);
+
+        let json = r#"{"enabled": true, "position": "bottom_center",
+            "year": true, "month": true, "day": false}"#;
+        let ts: TimestampConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(ts.position, TextPosition::BottomCenter);
+        assert_eq!(ts.font_size, None);
+        assert!(ts.validate().is_ok());
+    }
+
+    #[test]
+    fn test_font_size_validation() {
+        let mut ts = TimestampConfig {
+            font_size: Some(4.0),
+            ..TimestampConfig::default()
+        };
+        assert!(ts.validate().is_ok());
+        ts.font_size = Some(0.1);
+        assert!(ts.validate().is_err());
+        ts.font_size = Some(25.0);
+        assert!(ts.validate().is_err());
     }
 
     #[test]

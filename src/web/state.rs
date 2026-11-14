@@ -2,7 +2,7 @@
 
 use crate::config::Config;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock as StdRwLock};
 use tokio::sync::{broadcast, RwLock};
 use tokio_util::sync::CancellationToken;
@@ -26,6 +26,15 @@ impl JobStatus {
         matches!(
             self,
             JobStatus::Completed | JobStatus::Cancelled | JobStatus::Error(_)
+        )
+    }
+
+    /// Returns true while a job holds the job slot: running, making the video
+    /// or still cancelling. No other job may start until it is terminal.
+    pub fn is_active(&self) -> bool {
+        matches!(
+            self,
+            JobStatus::Running | JobStatus::Cancelling | JobStatus::CompilingVideo
         )
     }
 
@@ -183,6 +192,14 @@ pub struct Progress {
     pub album_names: Vec<String>,
     /// Output folder of the current/last run (versioned, e.g. `anna_2026-11-12_1430`)
     pub output_folder: Option<String>,
+    /// When the video compilation started (Unix time in milliseconds)
+    pub video_started_at: Option<u64>,
+    /// How long the video compilation took, once it is done (milliseconds)
+    pub video_millis: Option<u64>,
+    /// Length of the finished video in seconds
+    pub video_secs: Option<f64>,
+    /// The photos are prepared and wait for the user to pick them before the video is made
+    pub awaiting_review: bool,
 }
 
 impl Default for Progress {
@@ -198,6 +215,10 @@ impl Default for Progress {
             album_ids: vec![],
             album_names: vec![],
             output_folder: None,
+            video_started_at: None,
+            video_millis: None,
+            video_secs: None,
+            awaiting_review: false,
         }
     }
 }
@@ -214,8 +235,12 @@ pub struct AppState {
     /// Channel for broadcasting progress updates.
     pub progress_tx: broadcast::Sender<Progress>,
 
-    /// Cancellation token for the current job.
-    pub cancel_token: Arc<RwLock<Option<CancellationToken>>>,
+    /// Cancellation token for the current job, with the job's id so that a
+    /// finishing job only clears its own token, never that of a newer job.
+    pub cancel_token: Arc<RwLock<Option<(u64, CancellationToken)>>>,
+
+    /// Source of the job ids.
+    next_job_id: Arc<AtomicU64>,
 }
 
 impl AppState {
@@ -227,6 +252,7 @@ impl AppState {
             progress: Arc::new(RwLock::new(Progress::default())),
             progress_tx,
             cancel_token: Arc::new(RwLock::new(None)),
+            next_job_id: Arc::new(AtomicU64::new(1)),
         }
     }
 
@@ -267,7 +293,7 @@ impl AppState {
     /// Request cancellation of the current job.
     pub async fn request_cancel(&self) -> bool {
         let cancel_token = self.cancel_token.read().await;
-        if let Some(token) = cancel_token.as_ref() {
+        if let Some((_, token)) = cancel_token.as_ref() {
             token.cancel();
             // Update progress to show cancelling state immediately.
             // Only change to Cancelling if in an active (non-terminal) state.
@@ -283,16 +309,22 @@ impl AppState {
         }
     }
 
-    /// Create a new cancellation token for a job.
-    pub async fn create_cancel_token(&self) -> CancellationToken {
+    /// Create a new cancellation token for a job; returns the job's id (for
+    /// [`Self::clear_cancel_token`]) and the token.
+    pub async fn create_cancel_token(&self) -> (u64, CancellationToken) {
+        let id = self.next_job_id.fetch_add(1, Ordering::SeqCst);
         let token = CancellationToken::new();
-        *self.cancel_token.write().await = Some(token.clone());
-        token
+        *self.cancel_token.write().await = Some((id, token.clone()));
+        (id, token)
     }
 
-    /// Clear the cancellation token when job completes.
-    pub async fn clear_cancel_token(&self) {
-        *self.cancel_token.write().await = None;
+    /// Clear the cancellation token when the job `id` completes. Does nothing
+    /// when a newer job has its own token by then.
+    pub async fn clear_cancel_token(&self, id: u64) {
+        let mut slot = self.cancel_token.write().await;
+        if slot.as_ref().is_some_and(|(current, _)| *current == id) {
+            *slot = None;
+        }
     }
 
     /// Check if a job is currently running and return an error if so.
@@ -300,7 +332,7 @@ impl AppState {
     /// Use this at the start of handlers that cannot run while a job is in progress.
     pub async fn ensure_no_job_running(&self) -> Result<(), JobRunningError> {
         let progress = self.progress.read().await;
-        if progress.status == JobStatus::Running || progress.status == JobStatus::CompilingVideo {
+        if progress.status.is_active() {
             Err(JobRunningError)
         } else {
             Ok(())
@@ -322,12 +354,21 @@ impl std::error::Error for JobRunningError {}
 
 /// Validate that a path component (folder name or filename) is safe.
 ///
-/// Returns an error if the path contains traversal sequences or separators.
+/// Returns an error if the name is empty or `.`, or contains traversal
+/// sequences, separators or NUL.
 pub fn validate_path_component(
     name: &str,
     component_type: &str,
 ) -> Result<(), PathValidationError> {
-    if name.contains("..") || name.contains('/') || name.contains('\\') {
+    // The name must stay a direct child of its folder: `DELETE /api/output/%2E`
+    // must not remove the output folder itself.
+    if name.trim().is_empty()
+        || name.trim() == "."
+        || name.contains("..")
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains('\0')
+    {
         Err(PathValidationError {
             component_type: component_type.to_string(),
         })
@@ -349,3 +390,52 @@ impl std::fmt::Display for PathValidationError {
 }
 
 impl std::error::Error for PathValidationError {}
+
+#[cfg(test)]
+mod job_slot_tests {
+    use super::*;
+
+    #[test]
+    fn cancelling_still_holds_the_job_slot() {
+        assert!(JobStatus::Running.is_active());
+        assert!(JobStatus::Cancelling.is_active());
+        assert!(JobStatus::CompilingVideo.is_active());
+        assert!(!JobStatus::Idle.is_active());
+        assert!(!JobStatus::Completed.is_active());
+        assert!(!JobStatus::Cancelled.is_active());
+        assert!(!JobStatus::Error("x".into()).is_active());
+    }
+
+    #[test]
+    fn path_component_must_be_a_direct_child() {
+        for bad in ["", " ", ".", " . ", "..", "../x", "a/b", "a\\b", "x\0"] {
+            assert!(validate_path_component(bad, "folder").is_err(), "{bad:?}");
+        }
+        for ok in ["anna", "anna_2026-11-12_1430", "a.b", ".hidden"] {
+            assert!(validate_path_component(ok, "folder").is_ok(), "{ok:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn start_is_refused_while_cancelling() {
+        let state = AppState::new(Config::default());
+        state.progress.write().await.status = JobStatus::Cancelling;
+        assert!(state.ensure_no_job_running().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn an_old_job_does_not_clear_the_token_of_a_newer_one() {
+        let state = AppState::new(Config::default());
+        let (old, _) = state.create_cancel_token().await;
+        let (new, new_token) = state.create_cancel_token().await;
+        assert_ne!(old, new);
+
+        // The old job finishes after the new one has started
+        state.clear_cancel_token(old).await;
+        assert!(state.request_cancel().await, "new job must stay cancellable");
+        assert!(new_token.is_cancelled());
+
+        state.clear_cancel_token(new).await;
+        assert!(!state.request_cancel().await);
+    }
+}

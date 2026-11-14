@@ -12,7 +12,9 @@ use crate::config::{TimeIntervalConfig, TimeRange};
 use crate::error::{Error, Result};
 use crate::immich_api::{Asset, FaceData, ImmichClient};
 use crate::pipeline::Pipeline;
-use crate::utils::{sanitize_folder_name, versioned_folder_name, versions_to_prune};
+use crate::utils::{
+    sanitize_folder_name, split_folder_version, versioned_folder_name, versions_to_prune,
+};
 use crate::video::compile_timelapse;
 use crate::web::{AppState, AtomicSkipStats, JobStatus, Progress};
 
@@ -119,25 +121,49 @@ pub struct JobParams {
     pub date_to: Option<String>,
     pub album_ids: Vec<String>,
     pub album_names: Vec<String>,
+    /// Other people: photos that also show one of them count.
+    pub people_ids: Vec<String>,
+    /// Stop after preparing the photos (the video is made later from the folder).
+    pub review: bool,
+    /// The browser's selection, stored in run.json.
+    pub source: Option<serde_json::Value>,
 }
 
 /// Run the complete processing pipeline.
 ///
 /// This is the main entry point for background job processing.
 /// It handles progress reporting and cancellation.
-pub async fn run_job(state: AppState, params: JobParams, cancel_token: CancellationToken) {
+pub async fn run_job(
+    state: AppState,
+    params: JobParams,
+    job_id: u64,
+    cancel_token: CancellationToken,
+) {
+    let output_dir = state.config.read().await.output_dir.clone();
     let result = run_job_inner(state.clone(), params, cancel_token).await;
 
     // Clear the cancellation token when done
-    state.clear_cancel_token().await;
+    state.clear_cancel_token(job_id).await;
 
     // Get final state from progress (skip stats and person info)
     let final_progress = state.progress.read().await.clone();
 
-    if result.is_err() {
-        if let Some(folder) = final_progress.output_folder.as_deref() {
-            let output_dir = state.config.read().await.output_dir.clone();
+    if let Some(folder) = final_progress.output_folder.as_deref() {
+        if result.is_err() {
             discard_empty_run_folder(&output_dir, folder).await;
+        } else {
+            let stats = &final_progress.skip_stats;
+            let (kept, skipped) = (stats.kept(), stats.total());
+            let secs = final_progress.video_secs;
+            crate::run_info::update(&output_dir.join(folder), |run| {
+                run["result"] = serde_json::json!({
+                    "kept": kept,
+                    "skipped": skipped,
+                    "video_secs": secs,
+                    "finished": chrono::Local::now().to_rfc3339(),
+                });
+            })
+            .await;
         }
     }
 
@@ -211,14 +237,43 @@ async fn run_job_inner(
         None
     };
 
+    let originals = if config.processing.output.keep_originals {
+        let dir = person_dir.join("originals");
+        tokio::fs::create_dir_all(&dir)
+            .await
+            .map_err(|e| permission_aware_io_error(e, &dir))?;
+        Some(dir)
+    } else {
+        None
+    };
+
     let video_filename = format!("{}.mp4", folder_name);
     let output_dirs = OutputDirs {
         images: images_dir.clone(),
+        originals,
         video: person_dir.join(&video_filename),
         debug,
     };
 
     tracing::info!("Output directory: {}", person_dir.display());
+
+    // What this run was made from, so its settings can be taken over later.
+    // Only the run's own settings: never the Immich address or key.
+    crate::run_info::write(
+        &person_dir,
+        &serde_json::json!({
+            "created": chrono::Local::now().to_rfc3339(),
+            "person_id": params.person_id,
+            "person_name": params.person_name,
+            "date_from": params.date_from,
+            "date_to": params.date_to,
+            "album_names": params.album_names,
+            "source": params.source,
+            "processing": config.processing,
+            "video": config.video,
+        }),
+    )
+    .await;
 
     // Base progress carrying person/album identity, reused for all updates in this job
     let params_base = Progress {
@@ -248,22 +303,23 @@ async fn run_job_inner(
         return Err(Error::Cancelled);
     }
 
-    // Fetch all assets for this person (optionally filtered by albums)
+    // Fetch all assets for this person (optionally filtered by albums and other people)
     let assets = client
-        .get_assets_with_person(
+        .get_assets_with_sources(
             &params.person_id,
             params.date_from.as_deref(),
             params.date_to.as_deref(),
             &params.album_ids,
+            &params.people_ids,
         )
         .await?;
 
     if assets.is_empty() {
-        let msg = if params.album_ids.is_empty() {
+        let msg = if params.album_ids.is_empty() && params.people_ids.is_empty() {
             "No assets found for this person".to_string()
         } else {
             let names = if params.album_names.is_empty() {
-                "selected albums".to_string()
+                "the selected albums and people".to_string()
             } else {
                 params.album_names.join(", ")
             };
@@ -319,7 +375,7 @@ async fn run_job_inner(
 
     // Process images in parallel with concurrency limit
     let completed = Arc::new(AtomicU32::new(0));
-    let semaphore = Arc::new(Semaphore::new(config.processing.max_workers));
+    let semaphore = Arc::new(Semaphore::new(config.processing.max_workers.max(1)));
     let client = Arc::new(client);
     let config = Arc::new(config);
     let output_dirs = Arc::new(output_dirs);
@@ -493,32 +549,91 @@ async fn run_job_inner(
         return Err(Error::Cancelled);
     }
 
-    // Compile video if enabled
-    if config.video.enabled {
+    // Stop here when the user wants to pick the photos first; the video is
+    // then made from the folder (compile endpoint with `finish`).
+    if config.video.enabled && params.review {
         state
             .update_progress(Progress {
-                status: JobStatus::CompilingVideo,
-                total: successful as u32,
-                message: Some("Compiling video...".to_string()),
+                status: JobStatus::Running,
+                completed: total,
+                total,
+                message: Some("Photos ready to pick".to_string()),
                 skip_stats: final_skip_stats.clone(),
-                ..params_base
+                awaiting_review: true,
+                ..params_base.clone()
             })
             .await;
+        prune_old_versions(
+            &config.output_dir,
+            &person_base,
+            &folder_name,
+            config.processing.output.keep_versions,
+        )
+        .await;
+        return Ok(output_dirs.images.clone());
+    }
 
-        compile_timelapse(
+    // Compile video if enabled
+    if config.video.enabled {
+        let started = std::time::Instant::now();
+        let video_base = Progress {
+            status: JobStatus::CompilingVideo,
+            total: successful as u32,
+            message: Some("Compiling video...".to_string()),
+            skip_stats: final_skip_stats.clone(),
+            video_started_at: Some(unix_millis()),
+            ..params_base
+        };
+        state.update_progress(video_base.clone()).await;
+
+        // ffmpeg reports every few frames: forward a change of at least 1 %
+        let mut last_sent = 0u32;
+        let mut sends = Vec::new();
+        let compiled = compile_timelapse(
             &output_dirs.images,
             &output_dirs.video,
             &config.video,
             &config.music_dir,
+            &config.api,
             Some(&cancel_token),
             |frame, total| {
-                // Sync callback - just log progress. State updates would require
-                // async context or channels, which adds complexity for minimal benefit
-                // since video compilation is typically fast.
-                tracing::debug!("Video progress: {}/{}", frame, total);
+                let step = (total / 100).max(1);
+                if frame < total && frame < last_sent + step {
+                    return;
+                }
+                last_sent = frame;
+                let state = state.clone();
+                let update = Progress {
+                    completed: frame,
+                    total,
+                    ..video_base.clone()
+                };
+                sends.push(tokio::spawn(
+                    async move { state.update_progress(update).await },
+                ));
             },
         )
-        .await?;
+        .await;
+        // Let the frame updates land first, so none overwrites the final one
+        for send in sends {
+            let _ = send.await;
+        }
+        compiled?;
+
+        let video_secs = crate::video::probe_duration(&output_dirs.video).await.ok();
+        state
+            .update_progress(Progress {
+                completed: video_base.total,
+                message: Some("Video created".to_string()),
+                video_millis: Some(started.elapsed().as_millis() as u64),
+                video_secs,
+                ..video_base
+            })
+            .await;
+
+        if !config.processing.output.keep_frames {
+            remove_frames(&output_dirs.images).await;
+        }
     }
 
     prune_old_versions(
@@ -536,6 +651,13 @@ async fn run_job_inner(
     }
 }
 
+/// Current time as Unix milliseconds (0 if the clock is before 1970).
+fn unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
+}
+
 /// Remove the oldest versioned output folders of a person beyond `keep` (0 = unlimited).
 /// Folders from before versioning (no timestamp) are never removed automatically.
 async fn prune_old_versions(output_dir: &Path, person_base: &str, current: &str, keep: u32) {
@@ -551,12 +673,52 @@ async fn prune_old_versions(output_dir: &Path, person_base: &str, current: &str,
             names.push(entry.file_name().to_string_lossy().to_string());
         }
     }
-    for name in versions_to_prune(&names, person_base, current, keep) {
+    // Cancelled, failed or interrupted versions (run.json without a result)
+    // go first and do not count, so they never push out finished ones.
+    let mut doomed = Vec::new();
+    let mut finished = Vec::new();
+    for name in names {
+        let own = matches!(split_folder_version(&name), (p, Some(_)) if p == person_base);
+        if own && name != current && is_incomplete_run(&output_dir.join(&name)).await {
+            doomed.push(name);
+        } else {
+            finished.push(name);
+        }
+    }
+    doomed.extend(versions_to_prune(&finished, person_base, current, keep));
+    for name in doomed {
         match tokio::fs::remove_dir_all(output_dir.join(&name)).await {
             Ok(()) => tracing::info!("Removed old output version: {}", name),
             Err(e) => tracing::warn!("Failed to remove old output version {}: {}", name, e),
         }
     }
+}
+
+/// A run that wrote run.json but never got its result (cancelled, failed or
+/// interrupted by a restart). Folders without run.json are older and count as done.
+async fn is_incomplete_run(folder: &Path) -> bool {
+    crate::run_info::read(folder)
+        .await
+        .is_some_and(|run| run.get("result").and_then(|r| r.get("finished")).is_none())
+}
+
+/// Remove the frames after the video was made. The empty `images/` folder
+/// stays, so the folder still counts as a run.
+pub(crate) async fn remove_frames(images_dir: &Path) {
+    let Ok(mut entries) = tokio::fs::read_dir(images_dir).await else {
+        return;
+    };
+    let mut removed = 0u32;
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "jpg") {
+            match tokio::fs::remove_file(&path).await {
+                Ok(()) => removed += 1,
+                Err(e) => tracing::warn!("Failed to remove frame {}: {}", path.display(), e),
+            }
+        }
+    }
+    tracing::info!("Removed {} frames after the video was made", removed);
 }
 
 /// Remove the output folder of a failed or cancelled run if it holds no images,

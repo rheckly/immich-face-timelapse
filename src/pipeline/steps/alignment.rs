@@ -54,7 +54,7 @@ impl ProcessingStep for AlignmentStep {
             Err(e) => return StepOutcome::Error { ctx, error: e },
         };
 
-        let output_size = config.processing.output.size;
+        let (out_w, out_h) = config.processing.output.dimensions();
 
         // Get eye centers
         let left_eye = landmarks.left_eye_center();
@@ -75,12 +75,13 @@ impl ProcessingStep for AlignmentStep {
         let transform = calculate_eye_alignment_transform(
             left_eye,
             right_eye,
-            output_size,
+            out_w,
+            out_h,
             &config.processing.alignment,
         );
 
         // Apply the transformation
-        let aligned = apply_affine_transform(&image, &transform, output_size);
+        let aligned = apply_affine_transform(&image, &transform, out_w, out_h);
 
         ctx.image = Some(aligned);
 
@@ -168,23 +169,25 @@ impl AffineMatrix {
 /// 2. Compute rotation angle to make eyes horizontal
 /// 3. Compute scale to match desired inter-eye distance
 /// 4. Combine translation, rotation, scale, and final translation into one matrix
+///
+/// The eye targets are fractions of the frame: x of the width, y of the height, so the
+/// eyes keep their relative position in every aspect ratio and the eye distance stays a
+/// fraction of the frame width.
 fn calculate_eye_alignment_transform(
     left_eye: Point,
     right_eye: Point,
-    output_size: u32,
+    output_width: u32,
+    output_height: u32,
     alignment_config: &crate::config::AlignmentConfig,
 ) -> AffineMatrix {
-    let output_size_f = output_size as f32;
+    let (width_f, height_f) = (output_width as f32, output_height as f32);
 
     // Calculate target eye positions from the single eye_distance setting
     let left_eye_x = alignment_config.left_eye_x();
     let left_eye_y = alignment_config.left_eye_y();
 
-    let left_eye_target = Point::new(output_size_f * left_eye_x, output_size_f * left_eye_y);
-    let right_eye_target = Point::new(
-        output_size_f * (1.0 - left_eye_x),
-        output_size_f * left_eye_y,
-    );
+    let left_eye_target = Point::new(width_f * left_eye_x, height_f * left_eye_y);
+    let right_eye_target = Point::new(width_f * (1.0 - left_eye_x), height_f * left_eye_y);
 
     // Calculate angles
     let current_angle = (right_eye.y - left_eye.y).atan2(right_eye.x - left_eye.x);
@@ -231,7 +234,8 @@ fn calculate_eye_alignment_transform(
 fn apply_affine_transform(
     image: &DynamicImage,
     transform: &AffineMatrix,
-    output_size: u32,
+    output_width: u32,
+    output_height: u32,
 ) -> DynamicImage {
     let rgb = image.to_rgb8();
     let (width, height) = rgb.dimensions();
@@ -241,7 +245,7 @@ fn apply_affine_transform(
     let det = transform.a * transform.e - transform.b * transform.d;
     if det.abs() < 1e-10 {
         // Degenerate transform, return black image
-        return DynamicImage::ImageRgb8(RgbImage::new(output_size, output_size));
+        return DynamicImage::ImageRgb8(RgbImage::new(output_width, output_height));
     }
 
     let inv_det = 1.0 / det;
@@ -255,7 +259,7 @@ fn apply_affine_transform(
     };
 
     // Create output image using inverse mapping
-    let output = RgbImage::from_fn(output_size, output_size, |x, y| {
+    let output = RgbImage::from_fn(output_width, output_height, |x, y| {
         // Map output pixel to source pixel
         let (src_x, src_y) = inv_transform.transform_point(x as f32, y as f32);
 
@@ -330,5 +334,30 @@ mod tests {
             }
             other => panic!("Expected Error without landmarks, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_eye_targets_follow_frame() {
+        let config = crate::config::AlignmentConfig::default();
+        let left = Point::new(40.0, 50.0);
+        let right = Point::new(60.0, 50.0);
+        let transform = calculate_eye_alignment_transform(left, right, 1080, 608, &config);
+
+        let (lx, ly) = transform.transform_point(left.x, left.y);
+        let (rx, ry) = transform.transform_point(right.x, right.y);
+        // Eye distance is a fraction of the frame width
+        assert!((rx - lx - 0.15 * 1080.0).abs() < 0.5);
+        // Eyes keep their relative position: x of the width, y of the height
+        assert!((lx - config.left_eye_x() * 1080.0).abs() < 0.5);
+        assert!((ly - config.left_eye_y() * 608.0).abs() < 0.5);
+        assert!((ry - ly).abs() < 0.5);
+    }
+
+    #[test]
+    fn test_affine_output_size() {
+        let image = DynamicImage::ImageRgb8(RgbImage::new(50, 50));
+        let transform = AffineMatrix::scale(1.0);
+        let out = apply_affine_transform(&image, &transform, 120, 214);
+        assert_eq!((out.width(), out.height()), (120, 214));
     }
 }

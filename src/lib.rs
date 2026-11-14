@@ -11,6 +11,8 @@ pub mod immich_api;
 pub mod job;
 pub mod models;
 pub mod pipeline;
+pub mod run_info;
+pub mod smart_albums;
 pub mod utils;
 pub mod video;
 pub mod web;

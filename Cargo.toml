@@ -1,8 +1,8 @@
 [package]
 name = "immich-timelapse"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-description = "Create selfie timelapses from Immich using face recognition and alignment"
+description = "Immich Face-Timelapse: create face timelapses from Immich using face recognition and alignment"
 license = "MIT"
 repository = "https://github.com/ArnaudCrl/immich-automated-selfie-timelapse"
 
@@ -26,6 +26,7 @@ toml = "0.8"
 # Image processing
 image = { version = "0.25", features = ["jpeg", "png", "webp"] }
 imageproc = "0.25"
+ab_glyph = "0.2"
 kamadak-exif = "0.5"
 
 # ML models

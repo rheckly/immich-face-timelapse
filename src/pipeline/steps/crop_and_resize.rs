@@ -35,11 +35,11 @@ impl ProcessingStep for CropAndResizeStep {
             Err(e) => return StepOutcome::Error { ctx, error: e },
         };
 
-        let output_size = config.processing.output.size;
+        let (out_w, out_h) = config.processing.output.dimensions();
         let eye_distance = config.processing.alignment.eye_distance;
 
         // Crop returns CropResult with cropped images and face rectangle in crop coordinates
-        match crop_face_with_intermediate(image, &ctx.face_data, output_size, eye_distance) {
+        match crop_face_with_intermediate(image, &ctx.face_data, out_w, out_h, eye_distance) {
             Ok(crop_result) => {
                 // Store padding info for debug visualization
                 ctx.set_computed(
@@ -47,30 +47,21 @@ impl ProcessingStep for CropAndResizeStep {
                     ComputedValue::PaddingEdges(crop_result.padding_edges),
                 );
 
-                // Check if too much of the crop falls outside the image
-                let crop_config = &config.processing.crop;
-                if crop_config.enabled {
-                    let padding_pct = crop_result.padding_fraction * 100.0;
-                    if padding_pct > crop_config.max_padding_percent {
-                        // Set image so debug_visualize can use it
-                        ctx.image = Some(crop_result.resized);
-                        return StepOutcome::Skip {
-                            ctx,
-                            reason: "excessive_padding".to_string(),
-                            detail: Some(format!(
-                                "padding {:.1}% exceeds max {:.1}%",
-                                padding_pct, crop_config.max_padding_percent
-                            )),
-                        };
-                    }
-                }
+                let padding_pct = crop_result.padding_fraction * 100.0;
+                ctx.set_computed(
+                    computed_keys::PADDING_PERCENT,
+                    ComputedValue::Float(padding_pct),
+                );
 
-                // Use the pre-resized image from the crop function
-                let cropped_size = crop_result.cropped.width();
+                // Use the pre-resized image from the crop function. The face rectangle
+                // and scale are stored before the padding check, so a preview can go on
+                // measuring the other filters after this one fails.
+                let cropped_width = crop_result.cropped.width();
                 ctx.image = Some(crop_result.resized);
 
-                // Scale the face rectangle to match the resized image coordinates
-                let scale = output_size as f32 / cropped_size as f32;
+                // Scale the face rectangle to match the resized image coordinates. The
+                // crop has the frame's aspect ratio, so one scale fits both axes.
+                let scale = out_w as f32 / cropped_width as f32;
 
                 // Store scale for downstream steps (e.g. blur normalization)
                 ctx.set_computed(computed_keys::CROP_SCALE, ComputedValue::Float(scale));
@@ -87,6 +78,19 @@ impl ProcessingStep for CropAndResizeStep {
                     computed_keys::FACE_RECT,
                     ComputedValue::FaceRect(scaled_face_rect),
                 );
+
+                // Check if too much of the crop falls outside the image
+                let crop_config = &config.processing.crop;
+                if crop_config.enabled && padding_pct > crop_config.max_padding_percent {
+                    return StepOutcome::Skip {
+                        ctx,
+                        reason: "excessive_padding".to_string(),
+                        detail: Some(format!(
+                            "padding {:.1}% exceeds max {:.1}%",
+                            padding_pct, crop_config.max_padding_percent
+                        )),
+                    };
+                }
 
                 StepOutcome::Continue(ctx)
             }
@@ -303,6 +307,27 @@ mod tests {
                 let resized = new_ctx.image.unwrap();
                 assert_eq!(resized.width(), 256);
                 assert_eq!(resized.height(), 256);
+            }
+            _ => panic!("Expected Continue"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_crop_and_resize_aspect_ratio() {
+        let step = CropAndResizeStep;
+        let img = create_test_image(200, 200);
+        let ctx = make_ctx_with_image(img);
+
+        let mut config = Config::default();
+        config.processing.output.size = 1080;
+        config.processing.output.aspect_ratio = crate::config::AspectRatio::Portrait9x16;
+        config.processing.crop.enabled = false;
+
+        match step.execute(ctx, &config).await {
+            StepOutcome::Continue(new_ctx) => {
+                let resized = new_ctx.image.unwrap();
+                assert_eq!(resized.width(), 608);
+                assert_eq!(resized.height(), 1080);
             }
             _ => panic!("Expected Continue"),
         }
