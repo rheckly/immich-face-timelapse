@@ -118,6 +118,7 @@
             min_ear: Number(config.processing.eye_filter.min_ear),
           },
           output: {
+            ...config.processing.output, // keeps aspect_ratio set in the guided view
             size: Math.max(64, Math.min(4096, Number(config.processing.output.size) || 512)),
             keep_intermediates: config.processing.output.keep_intermediates,
             keep_versions: Math.max(0, Math.floor(Number(config.processing.output.keep_versions) || 0)),
@@ -126,6 +127,7 @@
             eye_distance: Number(config.processing.alignment.eye_distance),
           },
           timestamp: {
+            ...config.processing.timestamp, // keeps font_size set in the guided view
             enabled: config.processing.timestamp.enabled,
             position: config.processing.timestamp.position,
             year: config.processing.timestamp.year,
@@ -574,8 +576,10 @@
                       </label>
                       <select id="timestamp-position" bind:value={config.processing.timestamp.position}>
                         <option value="top_left">Top Left</option>
+                        <option value="top_center">Top Middle</option>
                         <option value="top_right">Top Right</option>
                         <option value="bottom_left">Bottom Left</option>
+                        <option value="bottom_center">Bottom Middle</option>
                         <option value="bottom_right">Bottom Right</option>
                       </select>
                     </div>

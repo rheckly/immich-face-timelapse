@@ -1,27 +1,18 @@
 <script>
+  import { t } from './i18n.svelte.js';
   let { config = $bindable(), onreset } = $props();
 </script>
 
 <label class="check" style="margin-top:0">
-  <input type="checkbox" bind:checked={config.processing.use_preview} /> Use preview images
+  <input type="checkbox" bind:checked={config.processing.use_preview} /> {t('adv.preview')}
 </label>
-<p class="muted">Download the Immich 1440p previews instead of the originals. Much faster.</p>
-
-<label for="g-workers">Parallel workers</label>
-<div class="valueRow">
-  <input id="g-workers" type="range" min="1" max="16" step="1" bind:value={config.processing.max_workers} />
-  <span class="val">{config.processing.max_workers}</span>
-</div>
+<p class="muted">{t('adv.previewHint')}</p>
 
 <label class="check mt">
-  <input type="checkbox" bind:checked={config.processing.output.keep_intermediates} /> Keep debug images
+  <input type="checkbox" bind:checked={config.processing.output.keep_intermediates} /> {t('adv.debug')}
 </label>
-<p class="muted">Save the intermediate processing steps next to the result.</p>
+<p class="muted">{t('adv.debugHint')}</p>
 
-<label for="g-keep-versions" class="mt">Versions per person</label>
-<input id="g-keep-versions" type="number" min="0" step="1" bind:value={config.processing.output.keep_versions} />
-<p class="muted">Every run gets its own folder. Keep only this many per person, the oldest are removed after a successful run (0 = keep all).</p>
-
-<h3 class="paneSection">Reset</h3>
-<p class="muted" style="margin-bottom:8px">Set all settings of steps 3 to 5 back to the defaults.</p>
-<button type="button" onclick={onreset}>Reset to defaults</button>
+<h3 class="paneSection">{t('adv.reset')}</h3>
+<p class="muted" style="margin-bottom:8px">{t('adv.resetHint')}</p>
+<button type="button" onclick={onreset}>{t('adv.resetBtn')}</button>

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Immich Selfie Timelapse</title>
+    <title>Immich Face-Timelapse</title>
     <script>
       // Set the theme before the page renders, so it does not flash. Used by the guided view.
       // Without an own choice, the system setting counts (like Mosaik).
@@ -13,7 +13,9 @@
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       })();
     </script>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Tab icon (64x64); the header of the guided view shows icon.png -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
   </head>
   <body>
     <div id="app"></div>

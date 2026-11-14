@@ -1,6 +1,7 @@
 <script>
-  // Shows the running server version (from GET /api/version) so it's always
-  // visible which build is live. Hover for commit and build date.
+  // Shows the running server version (from GET /api/version) bottom left,
+  // like Immich Mosaik: "Version 0.4.12 · 13.11.2026". Hover for commit and
+  // exact build time.
   import { onMount } from 'svelte';
   import { API } from '../constants.js';
 
@@ -15,16 +16,19 @@
     }
   });
 
+  function day(iso) {
+    const d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d)) return '';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+  }
+
   let label = $derived(
-    info ? (info.version.startsWith('v') ? info.version : `v${info.version}`) : ''
+    info ? [`Version ${info.version.replace(/^v/, '')}`, day(info.build_date)].filter(Boolean).join(' · ') : ''
   );
   let details = $derived(
     info
-      ? [
-          `Version ${info.version}`,
-          info.commit && `Commit ${info.commit}`,
-          info.build_date && `Built ${info.build_date}`,
-        ]
+      ? [info.commit && `Commit ${info.commit}`, info.build_date && `Build ${new Date(info.build_date).toLocaleString('de-CH')}`]
           .filter(Boolean)
           .join('\n')
       : ''
@@ -32,16 +36,21 @@
 </script>
 
 {#if info}
-  <span class="version" title={details}>{label}</span>
+  <div class="version" title={details}>{label}</div>
 {/if}
 
 <style>
+  /* Same as #version in Immich Mosaik (app/index.html) */
   .version {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.75rem;
-    color: inherit;
-    opacity: 0.7;
-    white-space: nowrap;
-    cursor: default;
+    position: fixed;
+    left: 20px;
+    bottom: 6px;
+    z-index: 5;
+    padding: 1px 7px;
+    /* Classic view has no --bg/--muted: blend into its dark page */
+    background: var(--bg, transparent);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--muted, #a0a4a8);
   }
 </style>

@@ -13,6 +13,7 @@
   --accent: #6db3d6;
   --on-accent: #111;
   --err: #ff8a8f;
+  --ok: #7fd18b;
   color-scheme: dark;
   height: 100vh;
   height: 100dvh;
@@ -32,6 +33,7 @@
   --accent: #2f6f8f;
   --on-accent: #fff;
   --err: #a4262c;
+  --ok: #2e7d32;
   color-scheme: light;
 }
 
@@ -80,19 +82,24 @@
   flex: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 12px;
   align-items: center;
-  padding: 10px 20px;
+  padding: 12px 20px;
   background: var(--card);
   border-bottom: 1px solid var(--line);
 }
-.guided > header h1 { font-size: 18px; margin: 0 auto 0 0; font-weight: 600; color: var(--text); }
+/* Like Mosaik: logo, title, then the path right after it; the rest sits on the right */
+.guided > header h1 { font-size: 18px; margin: 0; font-weight: bold; color: var(--text); }
+.guided .logo { width: 30px; height: 30px; border-radius: 7px; display: block; }
 /* Reused ConnectionStatus has a fixed dark pill: follow the theme here only */
 .guided > header .connection-status { background: var(--bg); border: 1px solid var(--line); color: var(--text); }
 .guided .themeBtn { width: 38px; height: 34px; padding: 0; font-size: 17px; line-height: 1; }
-.guided .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; font-size: 13px; }
-.guided .crumbs button { padding: 2px 6px; background: none; border: 0; text-decoration: underline; }
-.guided .crumbs .sep { opacity: 0.6; }
+.guided .langSwitch { display: flex; height: 34px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.guided .langSwitch button { border: 0; border-radius: 0; margin: 0; padding: 0 10px; background: var(--bg); color: inherit; font-size: 13px; }
+.guided .langSwitch button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.guided .crumbs { flex: 1 1 160px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; font-size: 13px; }
+.guided .crumbs button { padding: 2px 6px; background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; }
+.guided .crumbs .sep { padding: 2px 0; opacity: 0.6; }
 .guided .crumbs .now { padding: 2px 6px; font-weight: 600; }
 
 /* Columns: process on the left, panels next to it, newest on the right */
@@ -107,6 +114,29 @@
 }
 .guided .col { min-height: 0; min-width: 0; overflow: auto; }
 .guided progress { width: 100%; height: 8px; margin-top: 6px; accent-color: var(--accent); }
+.guided .small { font-size: 12px; }
+
+/* Step 7: the two phases of a run */
+.guided .phases { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.guided .phases li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.guided .phases li p { margin: 4px 0 0; }
+.guided .phaseHead { display: flex; align-items: center; gap: 8px; }
+.guided .phaseMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+}
+.guided .phases li.active { border-color: var(--accent); }
+.guided .phases li.active .phaseMark { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.guided .phases li.done .phaseMark { background: var(--ok); border-color: var(--ok); color: var(--card); }
+.guided .phases li.waiting,
+.guided .phases li.stopped { opacity: 0.65; }
 .guided .offLeft { display: none !important; }
 
 /* Boxes on the left */
@@ -118,6 +148,9 @@
   padding: 10px 14px;
   margin-bottom: 14px;
 }
+/* The run on the server, on top of the process */
+.guided .card.jobBar { border-color: var(--accent); border-left-width: 4px; }
+.guided .card.jobBar p { margin: 0 0 8px; overflow-wrap: anywhere; }
 .guided .boxHead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .guided .boxTitle { flex: 1; min-width: 0; margin: 0; font-size: 15px; }
 .guided .boxTitle.fixed { padding: 2px 0; font-weight: 600; }
@@ -182,6 +215,9 @@
 .guided .panel > * { flex-shrink: 0; }
 .guided .btnRow.doneRow { position: sticky; bottom: 0; z-index: 2; margin-top: auto; padding-top: 10px; background: var(--card); }
 .guided .paneSection { margin: 18px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 15px; }
+.guided .aboutTable { border-collapse: collapse; font-size: 14px; }
+.guided .aboutTable th { text-align: left; font-weight: normal; color: var(--muted); padding: 3px 16px 3px 0; vertical-align: top; }
+.guided .aboutTable td { padding: 3px 0; overflow-wrap: anywhere; }
 .guided .paneSection.first { margin-top: 0; padding-top: 0; border-top: 0; }
 .guided .sectionHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .guided .sectionHead h3 { margin: 0; font-size: inherit; }
@@ -253,6 +289,9 @@
 .guided .hist .ver { display: block; font-size: 0.85em; }
 .guided .hist .x { padding: 1px 9px; }
 .guided .badge { display: inline-block; padding: 0 6px; border-radius: 3px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 600; }
+.guided .badge.run { background: var(--ok); color: var(--bg); }
+.guided .badge.warn { background: none; border: 1px solid var(--err); color: var(--err); }
+.guided .histGroup:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .guided .bigCount { font-size: 18px; font-weight: 600; }
 .guided .music { list-style: none; margin: 4px 0; padding: 0; }
 .guided .music label.check { margin: 0; padding: 5px 6px; border-radius: 4px; }
@@ -265,6 +304,57 @@
 .guided .galleryPane .panel { padding: 0; }
 
 /* Narrow (phone): the process is one column, every panel covers the screen */
+/* Quality preview: one photo of the selection with the filters applied */
+.guided .pv { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.guided .pvHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.guided .pvHead h3 { margin: 0; }
+.guided .pvHead button { padding: 4px 10px; font-size: 13px; }
+.guided .pvStrip { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.guided .pvStrip button { flex: none; padding: 0; width: 46px; height: 46px; border: 2px solid transparent; border-radius: 5px; overflow: hidden; background: var(--line); }
+.guided .pvStrip button.on { border-color: var(--accent); }
+.guided .pvStrip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.guided .pvCount { margin-top: 4px; }
+.guided .pvPair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; align-items: start; transition: opacity 0.15s; }
+.guided .pvPair.pvBusy { opacity: 0.6; }
+.guided .pvPair figure { margin: 0; min-width: 0; }
+.guided .pvPair figcaption { font-size: 12px; color: var(--muted); margin-top: 3px; text-align: center; }
+.guided .pvOrig { position: relative; line-height: 0; }
+.guided .pvOrig img, .guided .pvFrame { width: 100%; height: auto; border-radius: 5px; display: block; }
+.guided .pvBox { position: absolute; border: 2px solid var(--accent); border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4); pointer-events: none; }
+.guided .pvNoFrame { aspect-ratio: 1; display: grid; place-items: center; border: 1px dashed var(--line); border-radius: 5px; color: var(--muted); font-size: 13px; }
+.guided .pvList { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13px; }
+.guided .pvList li { display: flex; gap: 7px; padding: 3px 6px; border-radius: 4px; }
+.guided .pvList li.focus { background: var(--bg); outline: 1px solid var(--line); }
+.guided .pvList li.off { color: var(--muted); }
+.guided .pvMark { flex: none; width: 1em; text-align: center; font-weight: 700; color: var(--muted); }
+.guided .pvMark.ok { color: var(--ok); }
+.guided .pvMark.bad { color: var(--err); }
+.guided .pvVerdict { margin-top: 10px; font-weight: 600; font-size: 14px; }
+.guided .pvVerdict.ok { color: var(--ok); }
+.guided .pvVerdict.bad { color: var(--err); }
+.guided .pvTime { margin-top: 4px; font-size: 12px; }
+
+/* Output format: aspect ratio buttons, date position grid and example frame */
+.guided .aspects { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.guided .aspects button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 6px; }
+.guided .aspects .shape { display: block; margin: 0 0 3px; border: 2px solid currentColor; border-radius: 2px; opacity: 0.7; }
+.guided .aspects small { font-size: 11px; color: var(--muted); }
+.guided .aspects button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.guided .aspects button.on small { color: inherit; }
+.guided .valueRow .val.wide { min-width: 110px; }
+.guided .posGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.guided .posGrid button { padding: 6px 4px; font-size: 13px; }
+.guided .posGrid button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.guided .linkBtn { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
+.guided .dateFrame {
+  position: relative; container-type: size; max-width: 100%; margin: 4px auto 0;
+  background: linear-gradient(160deg, #5b6770, #2c3236); border-radius: 4px; overflow: hidden;
+}
+.guided .dateText {
+  position: absolute; white-space: nowrap; line-height: 1; color: #fff; font-family: ui-monospace, Consolas, monospace;
+  text-shadow: 0.08em 0.08em 0 #000;
+}
+
 @media (max-width: 860px) {
   .guided > main { grid-template-columns: 1fr !important; padding: 12px; }
   .guided > header { padding: 10px 12px; }
@@ -283,3 +373,20 @@
   .guided aside.pane.l3 { z-index: 42; }
   .guided .row { grid-template-columns: 1fr; }
 }
+
+/* Source picker: albums, people and shared with (Mosaik) */
+.guided .panel > .srcList { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.guided .srcList > * { flex: none; }
+.guided .srcList > .srcTableWrap { flex: 1 1 auto; min-height: 160px; }
+.guided .srcTabs button { padding: 6px 10px; white-space: nowrap; }
+.guided .srcTable th { padding: 0; z-index: 1; }
+.guided .srcTable th.num { text-align: right; }
+.guided .srcTable td { padding: 4px 8px; }
+.guided .srcTable tr[data-id] { cursor: pointer; }
+.guided .sort { width: 100%; padding: 5px 8px; background: none; border: 0; border-radius: 0; color: var(--muted); font-size: 13px; text-align: inherit; white-space: nowrap; }
+.guided .sort.on { color: var(--text); font-weight: 600; }
+.guided .face { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: var(--bg); flex: none; }
+.guided .pickedRow span { overflow-wrap: anywhere; }
+
+/* Product name at the top of the About pane */
+.guided .aboutName { margin: 0; font-size: 16px; font-weight: bold; color: var(--text); }

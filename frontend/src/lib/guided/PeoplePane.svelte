@@ -1,4 +1,5 @@
 <script>
+  import { t } from './i18n.svelte.js';
   let { people = [], loading = false, error = null, selectedId = null, disabled = false, onselect } = $props();
 
   let query = $state('');
@@ -16,13 +17,13 @@
 </script>
 
 <fieldset {disabled}>
-  <input type="search" placeholder="Search by name" bind:value={query} aria-label="Search people" />
+  <input type="search" placeholder={t('common.searchName')} bind:value={query} aria-label={t('people.search')} />
   {#if loading}
-    <p class="muted mt">Loading people...</p>
+    <p class="muted mt">{t('people.loading')}</p>
   {:else if error}
     <p class="err mt">{error}</p>
   {:else if shown.length === 0}
-    <p class="muted mt">{people.length === 0 ? 'No named people found in Immich.' : 'Nobody matches the search.'}</p>
+    <p class="muted mt">{people.length === 0 ? t('people.none') : t('people.noMatch')}</p>
   {:else}
     <div class="people">
       {#each shown as p (p.id)}
@@ -38,7 +39,7 @@
               />
             {/if}
           </span>
-          <span class="name">{p.name || 'Unnamed'}</span>
+          <span class="name">{p.name || t('common.unnamed')}</span>
         </button>
       {/each}
     </div>

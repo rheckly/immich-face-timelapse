@@ -8,9 +8,10 @@
 
   function loadView() {
     try {
-      return localStorage.getItem(STORAGE_KEYS.view) === 'guided' ? 'guided' : 'classic';
+      // Guided is the default; classic only if the user explicitly chose it
+      return localStorage.getItem(STORAGE_KEYS.view) === 'classic' ? 'classic' : 'guided';
     } catch {
-      return 'classic';
+      return 'guided';
     }
   }
 

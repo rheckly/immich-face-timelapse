@@ -1,4 +1,5 @@
 <script>
+  import { t } from './i18n.svelte.js';
   // One step of the process in the left column. Optionally collapsible,
   // optionally with a ">" button that opens its panel on the right.
   let {
@@ -30,8 +31,8 @@
         type="button"
         class="paneBtn"
         class:on={paneOpen}
-        title="Open on the right"
-        aria-label="Open {title}"
+        title={t('common.openRight')}
+        aria-label={t('box.open', { title })}
         aria-pressed={paneOpen}
         disabled={locked}
         onclick={onopen}>&gt;</button
