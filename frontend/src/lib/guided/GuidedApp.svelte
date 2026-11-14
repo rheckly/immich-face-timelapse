@@ -123,6 +123,7 @@
   let right = $state(false); // gallery of the used photos
   let shareOpen = $state(false); // share panel right of the result
   let histDetail = $state(null); // level 2: folder whose details are open from the history
+  let histSub = $state(null); // level 3 right of the history details: 'video' | 'photos'
   let reviewOpen = $state(false); // level 2: pick the prepared photos before the video
   let closed = $state(new Set(readJson(STORAGE_KEYS.guidedClosedBoxes, [])));
 
@@ -143,6 +144,10 @@
     if (keep < 2) reviewOpen = false;
     if (keep < 3) pickAlbum = null;
     if (keep < 3) shareOpen = false;
+    if (keep < 3 && histSub) {
+      if (histSub === 'photos') loadOutputFolders(); // the gallery may have removed photos
+      histSub = null;
+    }
     if (keep < 3 && right) {
       right = false;
       loadOutputFolders(); // the gallery may have removed photos
@@ -161,6 +166,11 @@
     const same = histDetail === name;
     closeRightOf('pane');
     if (!same) histDetail = name;
+  }
+  function toggleHistSub(which) {
+    const open = histSub === which;
+    closeRightOf('hist');
+    if (!open) histSub = which;
   }
   function toggleReview() {
     const open = reviewOpen;
@@ -220,6 +230,8 @@
     if (pane) s.push({ id: 'pane', label: paneTitle(pane) });
     if (pane2) s.push({ id: 'pane2', label: pane2Title(pane2) });
     if (histDetail) s.push({ id: 'hist', label: histTitle });
+    if (histDetail && histSub === 'video') s.push({ id: 'histVideo', label: t('hist.watch') });
+    if (histDetail && histSub === 'photos') s.push({ id: 'histPhotos', label: t('common.usedPhotos') });
     if (reviewOpen) s.push({ id: 'review', label: t('review.title') });
     if (right) s.push({ id: 'right', label: t('common.usedPhotos') });
     if (shareOpen) s.push({ id: 'share', label: t('share.title') });
@@ -229,8 +241,8 @@
   let fit = $derived.by(() => {
     const ids = stack.map((p) => p.id);
     const leftW = Math.round(Math.min(380, Math.max(300, pageW * 0.32)));
-    const width = { left: leftW, pane: 520, pane2: 480, right: 640, album: 560, share: 480, hist: 480, review: 640 };
-    const track = { left: `${leftW}px`, pane: 'minmax(0,520px)', pane2: 'minmax(0,480px)', right: 'minmax(0,1fr)', album: 'minmax(0,1fr)', share: 'minmax(0,480px)', hist: 'minmax(0,480px)', review: 'minmax(0,1fr)' };
+    const width = { left: leftW, pane: 520, pane2: 480, right: 640, album: 560, share: 480, hist: 480, histVideo: 640, histPhotos: 640, review: 640 };
+    const track = { left: `${leftW}px`, pane: 'minmax(0,520px)', pane2: 'minmax(0,480px)', right: 'minmax(0,1fr)', album: 'minmax(0,1fr)', share: 'minmax(0,480px)', hist: 'minmax(0,480px)', histVideo: 'minmax(0,1fr)', histPhotos: 'minmax(0,1fr)', review: 'minmax(0,1fr)' };
     let used = 40 + width[ids.at(-1)];
     let first = ids.length - 1;
     while (first > 0 && used + 16 + width[ids[first - 1]] <= pageW) {
@@ -683,12 +695,6 @@
     pane = 'create';
   }
 
-  function openHistory(name) {
-    historyFolder = name;
-    resultStamp = Date.now();
-    closeRightOf('left');
-    pane = 'result';
-  }
   function handleFolderDeleted(name) {
     if (jobStatus === JOB_STATUS.completed && (name === null || name === completedFolderName)) {
       jobStatus = JOB_STATUS.idle;
@@ -1149,7 +1155,33 @@
       <!-- Level 2: details of a timelapse from the history -->
       {#if histDetail && histInfo}
         <Pane title={histTitle} level={2} offLeft={off('hist')} onclose={() => closeRightOf('pane')}>
-          <HistoryDetail folder={histInfo} disabled={busy} onwatch={() => openHistory(histDetail)} onedit={editFromRun} onsettings={settingsFromRun} />
+          <HistoryDetail folder={histInfo} disabled={busy} watchOpen={histSub === 'video'} onwatch={() => toggleHistSub('video')} photosOpen={histSub === 'photos'} onphotos={() => toggleHistSub('photos')} onedit={editFromRun} onsettings={settingsFromRun} />
+        </Pane>
+      {/if}
+
+      <!-- Level 3: video of the timelapse from the history; Done goes back to its details -->
+      {#if histDetail && histInfo && histSub === 'video'}
+        <Pane title={t('hist.watch')} level={3} offLeft={off('histVideo')} onclose={() => closeRightOf('hist')}>
+          {#key histDetail}
+            <video
+              controls
+              autoplay
+              playsinline
+              src={`/output/${encodeURIComponent(histDetail)}/${encodeURIComponent(histDetail)}.mp4?v=${resultStamp}`}
+            >
+              <track kind="captions" />
+            </video>
+          {/key}
+          <p class="muted mt">{histTitle}</p>
+        </Pane>
+      {/if}
+
+      <!-- Level 3: used photos of the timelapse from the history; Done goes back to its details -->
+      {#if histDetail && histInfo && histSub === 'photos'}
+        <Pane title={t('common.usedPhotos')} level={3} wide offLeft={off('histPhotos')} onclose={() => closeRightOf('hist')}>
+          {#key histDetail}
+            <GalleryView folderName={histDetail} onBack={() => closeRightOf('hist')} disabled={busy} />
+          {/key}
         </Pane>
       {/if}
 

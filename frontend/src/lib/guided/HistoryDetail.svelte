@@ -6,7 +6,7 @@
   import { formatSize, formatFolderVersion } from '../utils.js';
   import { formatDuration, frameSize, FILTERS } from './config.js';
 
-  let { folder, disabled = false, onwatch, onedit, onsettings } = $props();
+  let { folder, disabled = false, watchOpen = false, onwatch, photosOpen = false, onphotos, onedit, onsettings } = $props();
 
   let run = $state(null);
   let loadState = $state('loading'); // 'loading' | 'ok' | 'none' | 'error'
@@ -45,7 +45,7 @@
 </p>
 
 <div class="btnRow mt">
-  <button type="button" class="primary" disabled={!folder.has_video} onclick={onwatch}>{t('hist.watch')}</button>
+  <button type="button" class="primary" class:on={watchOpen} disabled={!folder.has_video} onclick={onwatch}>{t('hist.watch')}</button>
   <button type="button" disabled={disabled || loadState !== 'ok'} onclick={() => onedit(run)}>{t('hist.edit')}</button>
   <button type="button" disabled={disabled || !run?.processing || !run?.video} onclick={() => onsettings(run)}>{t('hist.settings')}</button>
 </div>
@@ -57,6 +57,12 @@
 {:else if loadState === 'error'}
   <p class="err small">{t('hist.errRun')}</p>
 {/if}
+
+<div class="paneSection sectionHead">
+  <h3>{t('common.usedPhotos')}</h3>
+  <button type="button" class="settingOpen" class:on={photosOpen} title={t('common.openRight')} aria-label={t('common.usedPhotos')} onclick={onphotos}>&gt;</button>
+</div>
+<p class="muted">{t('result.photosHint')}</p>
 
 {#if run}
   <h3 class="paneSection">{t('hist.details')}</h3>

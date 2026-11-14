@@ -10,8 +10,8 @@
 export const CHANGELOG = [
   {
     version: '1.0.0',
-    date: '',
-    released: false,
+    date: '2026-11-14',
+    released: true,
     changes: [
       // Name, look, language
       { type: 'CHG', de: `Umbenennung in «Immich Face-Timelapse» mit neuem Icon und Favicon und einem Hinweis auf das Original-Projekt im README; technische Namen bleiben gleich.`, en: `Renamed to "Immich Face-Timelapse" with a new icon and favicon and a note on the original project in the README; technical names stay the same.` },
@@ -30,6 +30,8 @@ export const CHANGELOG = [
       { type: 'NEW', de: `Live-Vorschau der Qualitätsfilter an einem Beispielfoto: markiertes Gesicht, entstehendes Bild, Messwerte und Urteil jedes Filters, folgt den Schiebereglern sofort.`, en: `Live preview of the quality filters on a sample photo: marked face, resulting frame, measured values and each filter's verdict, following the sliders instantly.` },
       { type: 'NEW', de: `Fotos vor dem Video auswählen: Nach dem Vorbereiten lassen sich einzelne Fotos per Klick herausnehmen oder wieder aufnehmen; herausgenommene Fotos werden nicht gelöscht.`, en: `Pick photos before the video: after preparation, single photos can be taken out or put back with a click; removed photos are not deleted.` },
       { type: 'CHG', de: `Schritt «Fotos auswählen»: Ein Klick auf die Box öffnet die Auswahl, die Box zeigt danach, wie viele Fotos in den Zeitraffer kommen (z. B. 8 / 12); der Knopf «Video erstellen» steht neu im Schritt «Video erstellen».`, en: `"Pick photos" step: clicking the box opens the selection, which then shows how many photos go into the timelapse (e.g. 8 / 12); the "Create video" button now sits in the "Create video" step.` },
+      { type: 'CHG', de: `«Video anschauen» bei früheren Zeitraffern öffnet das Video in einem eigenen Panel rechts von den Details; «Fertig» schliesst es und führt zurück zu den Details.`, en: `"Watch video" on earlier timelapses opens the video in its own panel to the right of the details; "Done" closes it and returns to the details.` },
+      { type: 'NEW', de: `Die Details eines früheren Zeitraffers zeigen unter «Verwendete Fotos >» die Fotos in einem Panel rechts; «Fertig» führt zurück zu den Details.`, en: `The details of an earlier timelapse show the used photos under "Used photos >" in a panel to the right; "Done" returns to the details.` },
       { type: 'FIX', de: `«Video erstellen» nach dem Auswählen der Fotos schlug mit «Failed to deserialize query string» fehl.`, en: `"Create video" after picking the photos failed with "Failed to deserialize query string".` },
       { type: 'NEW', de: `Fotos eines fertigen Zeitraffers nachträglich an- oder abwählen und das Video neu erstellen.`, en: `Select or deselect photos of a finished timelapse afterwards and re-create the video.` },
       { type: 'FIX', de: `Albumfotos werden über /search/metadata geladen, weil neuere Immich-Versionen sie nicht mehr in GET /albums/{id} liefern.`, en: `Album photos are loaded via /search/metadata because newer Immich versions no longer list them in GET /albums/{id}.` },
