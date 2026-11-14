@@ -1,13 +1,24 @@
 // Changelog of the fork (rheckly/immich-face-timelapse, branch
 // happy-pc) since it split from the original by ArnaudCrl.
 //
-// Newest version first. Each change: type NEW (feature), CHG (change) or FIX
-// (bug fix) and one sentence in German (Swiss spelling, "ss") and English.
+// Newest version first. Each change: type NEW (feature), CHG (change), FIX
+// (bug fix) or LNG (language / translation) and one sentence in German (Swiss spelling, "ss") and English.
 // Work that is not pushed yet goes into the entry with `released: false`; on
 // a release (push to happy-pc) set `released: true`, the date and the version
 // from Cargo.toml, and start a new unreleased entry when the next change comes.
 
 export const CHANGELOG = [
+  {
+    version: '1.0.2',
+    date: '2026-11-14',
+    released: true,
+    changes: [
+      { type: 'NEW', de: `Changelog mit Filtern: Release-Auswahl und Chips für die Art der Änderung (NEW, CHG, FIX, LNG) mit Anzahl.`, en: `Changelog with filters: release selection and chips for the type of change (NEW, CHG, FIX, LNG) with counts.` },
+      { type: 'FIX', de: `«Neuer Zeitraffer» setzt Vorspann und Abspann auf die Standardwerte zurück, damit Titel und Bild der vorherigen Person nicht stehen bleiben.`, en: `"New timelapse" sets the intro and outro back to the defaults, so the title and image of the previous person do not stay.` },
+      { type: 'CHG', de: `README mit Screenshots der geführten Ansicht: Schritte und Quellen, Qualitätsfilter mit Vorschau, Vorspann, verwendete Fotos und fertiges Video.`, en: `README with screenshots of the guided view: steps and sources, quality filters with preview, intro, used photos and the finished video.` },
+      { type: 'CHG', de: `Cargo.toml verweist als Repository auf den Fork rheckly/immich-face-timelapse statt auf das Original.`, en: `Cargo.toml points to the fork rheckly/immich-face-timelapse as repository instead of the original.` },
+    ],
+  },
   {
     version: '1.0.1',
     date: '2026-11-14',
@@ -28,7 +39,7 @@ export const CHANGELOG = [
       // Name, look, language
       { type: 'CHG', de: `Umbenennung in «Immich Face-Timelapse» mit neuem Icon und Favicon und einem Hinweis auf das Original-Projekt im README; technische Namen bleiben gleich.`, en: `Renamed to "Immich Face-Timelapse" with a new icon and favicon and a note on the original project in the README; technical names stay the same.` },
       { type: 'CHG', de: `Die geführte Ansicht ist jetzt die Standardansicht; die klassische erscheint nur noch, wenn sie ausdrücklich gewählt wird.`, en: `The guided view is now the default; the classic view only appears when explicitly chosen.` },
-      { type: 'NEW', de: `Die geführte Ansicht ist zweisprachig (Deutsch und Englisch) mit Sprachwahl in der Kopfzeile; ohne eigene Wahl gilt die Browsersprache.`, en: `The guided view is bilingual (German and English) with a language switch in the header; without a choice the browser language is used.` },
+      { type: 'LNG', de: `Die geführte Ansicht ist zweisprachig (Deutsch und Englisch) mit Sprachwahl in der Kopfzeile; ohne eigene Wahl gilt die Browsersprache.`, en: `The guided view is bilingual (German and English) with a language switch in the header; without a choice the browser language is used.` },
       { type: 'NEW', de: `Panel «Über» mit Version, Build-Datum, Commit, Herkunft und Status der Immich-Verbindung mit «Erneut versuchen».`, en: `"About" panel with version, build date, commit, origin and Immich connection status with "Retry".` },
       { type: 'NEW', de: `Changelog im Panel «Über»: alle Änderungen seit dem Fork, nach Version gruppiert.`, en: `Changelog in the "About" panel: all changes since the fork, grouped by version.` },
       { type: 'CHG', de: `Versionsanzeige wie bei Immich Mosaik unten links als «Version x · Datum», Commit und Build-Zeit im Tooltip.`, en: `Version display bottom left like Immich Mosaik as "Version x · date", with commit and build time in the tooltip.` },

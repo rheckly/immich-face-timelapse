@@ -710,9 +710,19 @@
   });
 
   // Start the next timelapse: no person, all photos, no period, back to step 1.
-  // The settings stay; Advanced resets them to the defaults.
+  // Intro and outro belong to the person and go back to the defaults; the
+  // other settings stay (Advanced resets them).
   async function newTimelapse() {
     if (!confirm(t('confirm.new'))) return;
+    if (config) {
+      try {
+        const defaults = await getJson(API.configDefaults);
+        if (defaults?.video?.intro) config.video.intro = defaults.video.intro;
+        if (defaults?.video?.outro) config.video.outro = defaults.video.outro;
+      } catch (e) {
+        saveState = await handleError(t('err.defaults'), e);
+      }
+    }
     closeRightOf('left');
     historyFolder = null;
     if (!busy && jobStatus !== JOB_STATUS.idle) {

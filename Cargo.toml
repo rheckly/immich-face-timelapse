@@ -1,10 +1,10 @@
 [package]
 name = "immich-timelapse"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 description = "Immich Face-Timelapse: create face timelapses from Immich using face recognition and alignment"
 license = "MIT"
-repository = "https://github.com/ArnaudCrl/immich-automated-selfie-timelapse"
+repository = "https://github.com/rheckly/immich-face-timelapse"
 
 [dependencies]
 # Async runtime

@@ -15,8 +15,32 @@ that crops, aligns, filters and compiles them into a smooth timelapse video.
   <img src="resources/result.gif" alt="Timelapse example" width="40%">
 </p>
 
-<!-- Screenshots of the guided view go here, e.g.:
-     resources/guided/person.png, sources.png, quality.png, pick-photos.png, result.png -->
+## Screenshots
+
+The guided view leads step by step from the person to the finished video; every step opens its settings in a
+panel on the right. *(Photos and names are blurred.)*
+
+**Steps and photo sources**: choose a person, then limit the photos to albums, people or shared albums.
+
+![Steps on the left, photo sources on the right](resources/guided/overview.png)
+
+**Quality filters with live preview**: every filter shows its verdict on a sample photo and follows the sliders
+instantly.
+
+![Quality filters with the blur filter and its preview](resources/guided/quality.png)
+
+**Intro and outro**: an animated title with a photo from Immich, an uploaded image or a colour.
+
+![Intro settings with a preview still](resources/guided/intro.png)
+
+**Previous timelapses and photo picking**: every run is kept with its settings; look through the used photos,
+remove bad ones and create the video again.
+
+![Used photos of a finished timelapse](resources/guided/pick-photos.png)
+
+**Result**: watch the video, edit the timelapse or take over its settings for a new one.
+
+![Finished timelapse with its video](resources/guided/result.png)
 
 ## Features
 
