@@ -3,7 +3,9 @@ name: Publish to GHCR
 on:
   push:
     branches: [happy-pc, master]
-    tags: ["v*"]
+    # Own release tags only (ft-v1.2.3); the upstream v2.x tags must not
+    # trigger a publish of this fork
+    tags: ["ft-v*"]
   workflow_dispatch:
 
 concurrency:
@@ -67,7 +69,9 @@ jobs:
       - name: Build info
         id: buildinfo
         run: |
-          echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+          # Face-Timelapse version from Cargo.toml (own numbering since 1.0.0);
+          # the commit (sha) maps it to the exact GitHub state
+          echo "version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "date=$(git show -s --format=%cd --date=format:%Y-%m-%dT%H:%M HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -120,6 +124,15 @@ jobs:
       contents: read
       packages: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: Cargo.toml
+          sparse-checkout-cone-mode: false
+
+      - name: App version
+        id: appver
+        run: echo "version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
@@ -141,9 +154,10 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,format=short
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/happy-pc' || (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')) }}
+            # App version from Cargo.toml (e.g. 1.1.0), so the NAS can pin a release
+            type=raw,value=${{ steps.appver.outputs.version }},enable=${{ github.ref == 'refs/heads/happy-pc' || startsWith(github.ref, 'refs/tags/ft-v') }}
+            type=match,pattern=ft-v(\d+\.\d+\.\d+),group=1
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/happy-pc' || startsWith(github.ref, 'refs/tags/ft-v') }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests

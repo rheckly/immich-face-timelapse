@@ -89,7 +89,8 @@ jobs:
   docker-build-push:
     name: Build and push (${{ matrix.arch }})
     needs: [check, frontend-check]
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Upstream release publishing to Docker Hub; never from this fork
+    if: startsWith(github.ref, 'refs/tags/v') && github.repository_owner == 'arnaudcayrol'
     permissions:
       contents: read
     strategy:

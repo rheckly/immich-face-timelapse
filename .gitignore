@@ -20,3 +20,6 @@ models/
 
 # Debug/temp artifacts
 *.dot
+
+# NAS dev build (scripts/deploy-nas.sh)
+/build

@@ -1,4 +1,6 @@
-# Immich Selfie Timelapse
+# Immich Face-Timelapse
+
+Based on [ArnaudCrl/immich-automated-selfie-timelapse](https://github.com/ArnaudCrl/immich-automated-selfie-timelapse). Technical names (repository, Docker image, container) are unchanged.
 
 ***Generate timelapse videos of your loved ones' portraits from your [Immich](https://immich.app/) photo library.***
 
@@ -63,6 +65,9 @@ services:
     environment:
       - IMMICH_API_KEY=abcdefghijklmnopqrstuvwxyz
       - IMMICH_BASE_URL=http://your-immich-host:2283
+      # optional: "Shared with" source from Immich Smart Albums
+      # - SMARTALBUMS_URL=http://your-smartalbums-host:8080
+      # - CONNECT_KEY=${CONNECT_KEY}
     volumes:
       - ./config:/app/config
       - ./output:/app/output
@@ -78,6 +83,8 @@ docker run -d \
   -p 5000:5000 \
   -e IMMICH_API_KEY=your-api-key-here \
   -e IMMICH_BASE_URL=http://your_server:2283 \
+  -e SMARTALBUMS_URL=http://your_server:8080 \
+  -e CONNECT_KEY=your-connect-key \
   -v ./config:/app/config \
   -v ./output:/app/output \
   -v ./music:/app/music:ro \
@@ -109,6 +116,26 @@ Mount a folder with audio files at `/app/music` (or set `MUSIC_DIR` to another p
 - enable **Fit video to music**: framerate = number of images ÷ total music length, limited to a configurable
   minimum and maximum framerate. If the limit kicks in, the video ends before the music (minimum) or runs
   longer than the music (maximum); the music is always cut and faded out at whichever ends first.
+
+### Photo sources (guided view)
+
+In step 2 of the guided view you can limit the photos of the person to sources, as in Immich Mosaik:
+
+- **Albums**: photos in one of the chosen albums,
+- **People**: photos that also show one of the chosen people,
+- **Shared with** *(optional)*: photos in an album shared with one of the chosen people in
+  Immich Smart Albums.
+
+A photo counts if it matches at least one chosen source; nothing chosen means all photos.
+
+The **Shared with** tab is only shown when both environment variables are set:
+
+| Variable | Description |
+|---|---|
+| `SMARTALBUMS_URL` | Base URL of Smart Albums as reachable from this container, e.g. `http://smartalbums:8080` |
+| `CONNECT_KEY` | The connect key of Smart Albums (sent as `X-Connect-Key`), the same value Mosaik uses |
+
+If Smart Albums can't be reached, the tab shows the error instead of the list.
 
 ### Fork image (GHCR)
 
