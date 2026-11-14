@@ -517,7 +517,10 @@ pub async fn get_selection(
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let folder = state.config.read().await.output_dir.join(&folder_name);
     if !path_exists(&folder.join("images")).await {
-        return Err((StatusCode::NOT_FOUND, format!("Folder '{}' has no images", folder_name)));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Folder '{}' has no images", folder_name),
+        ));
     }
     Ok(Json(Selection {
         images: jpg_names(&folder.join("images")).await,
@@ -540,18 +543,26 @@ pub async fn put_selection(
     }
     {
         let progress = state.progress.read().await;
-        let busy = matches!(progress.status, JobStatus::Running | JobStatus::CompilingVideo)
-            && !progress.awaiting_review
+        let busy = matches!(
+            progress.status,
+            JobStatus::Running | JobStatus::CompilingVideo
+        ) && !progress.awaiting_review
             && progress.output_folder.as_deref() == Some(folder_name.as_str());
         if busy {
-            return Err((StatusCode::CONFLICT, "This folder is being processed".to_string()));
+            return Err((
+                StatusCode::CONFLICT,
+                "This folder is being processed".to_string(),
+            ));
         }
     }
     let folder = state.config.read().await.output_dir.join(&folder_name);
     let images = folder.join("images");
     let excluded = folder.join(EXCLUDED_DIR);
     if !path_exists(&images).await {
-        return Err((StatusCode::NOT_FOUND, format!("Folder '{}' has no images", folder_name)));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Folder '{}' has no images", folder_name),
+        ));
     }
     let wanted: std::collections::HashSet<&str> =
         request.excluded.iter().map(String::as_str).collect();
@@ -628,8 +639,7 @@ pub async fn compile_folder_video(
     // to prevent TOCTOU race conditions between concurrent requests.
     {
         let mut progress = state.progress.write().await;
-        if progress.status.is_active() && !progress.awaiting_review
-        {
+        if progress.status.is_active() && !progress.awaiting_review {
             return Err((StatusCode::CONFLICT, "A job is already running".to_string()));
         }
         // Finishing the run that waited for the selection keeps its person and counts
@@ -712,7 +722,8 @@ pub async fn compile_folder_video(
                     run["result"]["kept"] = serde_json::json!(image_count);
                     run["result"]["excluded"] = serde_json::json!(excluded);
                     run["result"]["video_secs"] = serde_json::json!(video_secs);
-                    run["result"]["finished"] = serde_json::json!(chrono::Local::now().to_rfc3339());
+                    run["result"]["finished"] =
+                        serde_json::json!(chrono::Local::now().to_rfc3339());
                 })
                 .await;
                 if finish && !keep_frames {

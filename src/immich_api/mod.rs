@@ -569,7 +569,12 @@ impl ImmichClient {
             assets: Items,
         }
         let found: SmartResponse = response.json().await?;
-        Ok(found.assets.items.into_iter().filter(PickAsset::is_image).collect())
+        Ok(found
+            .assets
+            .items
+            .into_iter()
+            .filter(PickAsset::is_image)
+            .collect())
     }
 
     /// Small thumbnail of an asset (`size=thumbnail`), with its content type.

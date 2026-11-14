@@ -28,7 +28,11 @@ fn internal(e: impl std::fmt::Display) -> ApiError {
     (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
 }
 
-fn image_response(bytes: impl Into<Body>, content_type: &str, cache: &str) -> Result<Response<Body>, ApiError> {
+fn image_response(
+    bytes: impl Into<Body>,
+    content_type: &str,
+    cache: &str,
+) -> Result<Response<Body>, ApiError> {
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
@@ -44,7 +48,11 @@ async fn client(state: &AppState) -> Result<ImmichClient, ApiError> {
 
 /// `GET /api/fonts`: fonts available for the titles.
 pub async fn get_fonts() -> Json<Vec<FontInfo>> {
-    Json(tokio::task::spawn_blocking(list_fonts).await.unwrap_or_default())
+    Json(
+        tokio::task::spawn_blocking(list_fonts)
+            .await
+            .unwrap_or_default(),
+    )
 }
 
 /// `GET /api/titles/images`: uploaded title images.
@@ -59,7 +67,10 @@ pub async fn get_title_image(Path(filename): Path<String>) -> Result<Response<Bo
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|_| (StatusCode::NOT_FOUND, format!("'{}' not found", filename)))?;
-    let ext = filename.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    let ext = filename
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
     let content_type = match ext.as_str() {
         "png" => "image/png",
         "webp" => "image/webp",
@@ -90,14 +101,24 @@ pub async fn upload_title_image(
         return Err((StatusCode::BAD_REQUEST, "The file is empty".to_string()));
     }
     if image::guess_format(&body).is_err() {
-        return Err((StatusCode::BAD_REQUEST, "The file is not an image".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "The file is not an image".to_string(),
+        ));
     }
-    tokio::fs::create_dir_all(TITLE_IMAGES_DIR).await.map_err(internal)?;
+    tokio::fs::create_dir_all(TITLE_IMAGES_DIR)
+        .await
+        .map_err(internal)?;
 
-    let (stem, ext) = filename.rsplit_once('.').unwrap_or((filename.as_str(), "jpg"));
+    let (stem, ext) = filename
+        .rsplit_once('.')
+        .unwrap_or((filename.as_str(), "jpg"));
     let mut name = filename.clone();
     let mut n = 2;
-    while tokio::fs::metadata(std::path::Path::new(TITLE_IMAGES_DIR).join(&name)).await.is_ok() {
+    while tokio::fs::metadata(std::path::Path::new(TITLE_IMAGES_DIR).join(&name))
+        .await
+        .is_ok()
+    {
         name = format!("{}-{}.{}", stem, n, ext);
         n += 1;
     }
@@ -182,7 +203,8 @@ pub async fn get_asset_thumbnail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Response<Body>, ApiError> {
-    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
         return Err((StatusCode::BAD_REQUEST, "Invalid asset id".to_string()));
     }
     let (bytes, content_type) = client(&state)

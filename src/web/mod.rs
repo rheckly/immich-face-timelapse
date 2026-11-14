@@ -2,8 +2,8 @@
 
 mod handlers;
 pub mod shares;
-mod zip_store;
 mod state;
+mod zip_store;
 
 pub use handlers::*;
 pub use state::*;

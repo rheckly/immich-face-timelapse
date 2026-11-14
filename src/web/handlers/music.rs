@@ -108,8 +108,8 @@ pub async fn upload_music_track(
     // Write to a hidden temp file first (hidden = not listed), then rename
     let temp = music_dir.join(format!(".upload-{}.part", filename));
     let write_err = |e: std::io::Error| {
-        let read_only = e.kind() == std::io::ErrorKind::PermissionDenied
-            || e.raw_os_error() == Some(30); // EROFS
+        let read_only =
+            e.kind() == std::io::ErrorKind::PermissionDenied || e.raw_os_error() == Some(30); // EROFS
         let message = if read_only {
             format!(
                 "Music folder is read-only ({}); mount it writable (without :ro)",

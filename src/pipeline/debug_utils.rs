@@ -276,7 +276,9 @@ mod tests {
         let white = Rgb([255, 255, 255]);
         draw_scaled_text(&mut img, 0, 0, "1", white, 3);
         // "1" has its bottom row fully set from column 1 to 3: 9 pixels at scale 3
-        let bottom: Vec<u32> = (0..18).filter(|&x| img.get_pixel(x, 20)[0] == 255).collect();
+        let bottom: Vec<u32> = (0..18)
+            .filter(|&x| img.get_pixel(x, 20)[0] == 255)
+            .collect();
         assert_eq!(bottom, (3..12).collect::<Vec<u32>>());
         // Nothing below the 7 rows of the font
         assert!((0..40).all(|x| img.get_pixel(x, 21)[0] == 0));

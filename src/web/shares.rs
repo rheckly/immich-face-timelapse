@@ -616,7 +616,10 @@ async fn share_photos(
         );
     };
     let mut res = serve_file(zip, req).await;
-    let value = format!("attachment; filename=\"{}-Fotos.zip\"", download_name(&share));
+    let value = format!(
+        "attachment; filename=\"{}-Fotos.zip\"",
+        download_name(&share)
+    );
     if let Ok(v) = HeaderValue::from_str(&value) {
         res.headers_mut().insert(header::CONTENT_DISPOSITION, v);
     }
@@ -628,7 +631,9 @@ async fn share_photos(
 async fn ensure_photos_zip(video: &std::path::Path) -> Option<PathBuf> {
     let dir = video.parent()?.to_path_buf();
     let _guard = ZIP_LOCK.lock().await;
-    let made = tokio::task::spawn_blocking(move || build_photos_zip(&dir)).await.ok()?;
+    let made = tokio::task::spawn_blocking(move || build_photos_zip(&dir))
+        .await
+        .ok()?;
     made.map_err(|e| tracing::warn!("Photos ZIP: {e}")).ok()
 }
 
@@ -641,9 +646,9 @@ fn build_photos_zip(dir: &std::path::Path) -> std::io::Result<PathBuf> {
         .map(|e| e.path())
         .filter(|p| {
             p.is_file()
-                && p.extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "jpg" | "jpeg" | "png"))
+                && p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                    matches!(e.to_ascii_lowercase().as_str(), "jpg" | "jpeg" | "png")
+                })
         })
         .collect();
     if files.is_empty() {
@@ -671,7 +676,11 @@ fn build_photos_zip(dir: &std::path::Path) -> std::io::Result<PathBuf> {
         return Err(e);
     }
     std::fs::rename(&tmp, &zip)?;
-    tracing::info!("Photos ZIP made: {} ({} photos)", zip.display(), entries.len());
+    tracing::info!(
+        "Photos ZIP made: {} ({} photos)",
+        zip.display(),
+        entries.len()
+    );
     Ok(zip)
 }
 
@@ -869,7 +878,13 @@ mod tests {
             download: false,
             photos: false,
         };
-        assert_eq!(download_name(&Share { title: "Anna – 2024!".into(), ..s.clone() }), "Anna_2024");
+        assert_eq!(
+            download_name(&Share {
+                title: "Anna – 2024!".into(),
+                ..s.clone()
+            }),
+            "Anna_2024"
+        );
         assert!(s.is_expired(now));
     }
 

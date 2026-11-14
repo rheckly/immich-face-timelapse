@@ -20,24 +20,56 @@ const FALLBACK_FONT: &str = "DejaVuSans-Bold.ttf";
 const CAP_HEIGHT: f32 = 0.72;
 
 const MONTHS_DE: [&str; 12] = [
-    "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober",
-    "November", "Dezember",
+    "Januar",
+    "Februar",
+    "März",
+    "April",
+    "Mai",
+    "Juni",
+    "Juli",
+    "August",
+    "September",
+    "Oktober",
+    "November",
+    "Dezember",
 ];
 const MONTHS_DE_SHORT: [&str; 12] = [
     "Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.", "Dez.",
 ];
 const MONTHS_EN: [&str; 12] = [
-    "January", "February", "March", "April", "May", "June", "July", "August", "September",
-    "October", "November", "December",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ];
 const MONTHS_EN_SHORT: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 const WEEKDAYS_DE: [&str; 7] = [
-    "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag",
+    "Montag",
+    "Dienstag",
+    "Mittwoch",
+    "Donnerstag",
+    "Freitag",
+    "Samstag",
+    "Sonntag",
 ];
 const WEEKDAYS_EN: [&str; 7] = [
-    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
 ];
 
 /// Overlays timestamp on the image.
@@ -71,8 +103,16 @@ impl TimestampStep {
             let parts: Vec<String> = order
                 .chars()
                 .filter_map(|c| match c {
-                    'd' if config.day => Some(if pad { format!("{d:02}") } else { d.to_string() }),
-                    'm' if config.month => Some(if pad { format!("{m:02}") } else { m.to_string() }),
+                    'd' if config.day => Some(if pad {
+                        format!("{d:02}")
+                    } else {
+                        d.to_string()
+                    }),
+                    'm' if config.month => Some(if pad {
+                        format!("{m:02}")
+                    } else {
+                        m.to_string()
+                    }),
                     'y' if config.year => Some(if short_year {
                         format!("{:02}", y.rem_euclid(100))
                     } else {
@@ -346,7 +386,10 @@ mod tests {
 
     #[test]
     fn test_parse_timestamp() {
-        assert_eq!(TimestampStep::parse_timestamp("2024-01-15"), Some((2024, 1, 15)));
+        assert_eq!(
+            TimestampStep::parse_timestamp("2024-01-15"),
+            Some((2024, 1, 15))
+        );
         assert_eq!(
             TimestampStep::parse_timestamp("2024-01-15T12:34:56.789Z"),
             Some((2024, 1, 15))
@@ -387,7 +430,10 @@ mod tests {
         assert_eq!(TimestampStep::format_date(2024, 9, 3, &c), "3. Sept. 2024");
         let mut c = cfg(DateFormat::Weekday, true, true, true);
         c.lang = "en".to_string();
-        assert_eq!(TimestampStep::format_date(2024, 5, 17, &c), "Friday, 17 May 2024");
+        assert_eq!(
+            TimestampStep::format_date(2024, 5, 17, &c),
+            "Friday, 17 May 2024"
+        );
     }
 
     #[test]

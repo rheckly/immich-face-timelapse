@@ -177,7 +177,11 @@ pub async fn list_title_images() -> Result<Vec<String>> {
     };
     while let Some(entry) = entries.next_entry().await? {
         let name = entry.file_name().to_string_lossy().to_string();
-        let is_file = entry.file_type().await.map(|t| t.is_file()).unwrap_or(false);
+        let is_file = entry
+            .file_type()
+            .await
+            .map(|t| t.is_file())
+            .unwrap_or(false);
         if is_file && is_title_image(&name) {
             names.push(name);
         }
@@ -248,14 +252,17 @@ fn largest_face(faces: &[crate::immich_api::AssetFace]) -> Option<(f64, f64)> {
         .filter(|d| d.image_width > 0 && d.image_height > 0)
         .max_by(|a, b| {
             let area = |d: &crate::immich_api::FaceData| {
-                ((d.bounding_box_x2 - d.bounding_box_x1) * (d.bounding_box_y2 - d.bounding_box_y1)).abs()
+                ((d.bounding_box_x2 - d.bounding_box_x1) * (d.bounding_box_y2 - d.bounding_box_y1))
+                    .abs()
             };
             area(a).total_cmp(&area(b))
         })
         .map(|d| {
             (
-                ((d.bounding_box_x1 + d.bounding_box_x2) as f64 / 2.0 / d.image_width as f64).clamp(0.0, 1.0),
-                ((d.bounding_box_y1 + d.bounding_box_y2) as f64 / 2.0 / d.image_height as f64).clamp(0.0, 1.0),
+                ((d.bounding_box_x1 + d.bounding_box_x2) as f64 / 2.0 / d.image_width as f64)
+                    .clamp(0.0, 1.0),
+                ((d.bounding_box_y1 + d.bounding_box_y2) as f64 / 2.0 / d.image_height as f64)
+                    .clamp(0.0, 1.0),
             )
         })
 }
@@ -263,7 +270,12 @@ fn largest_face(faces: &[crate::immich_api::AssetFace]) -> Option<(f64, f64)> {
 /// A point (0..1) of a `ow`x`oh` photo in the `bw`x`bh` background that
 /// `resize_to_fill` makes from it (scaled, then cut in the middle).
 fn crop_focus(p: (f64, f64), ow: u32, oh: u32, bw: u32, bh: u32) -> (f64, f64) {
-    let (ow, oh, bw, bh) = (ow.max(1) as f64, oh.max(1) as f64, bw.max(1) as f64, bh.max(1) as f64);
+    let (ow, oh, bw, bh) = (
+        ow.max(1) as f64,
+        oh.max(1) as f64,
+        bw.max(1) as f64,
+        bh.max(1) as f64,
+    );
     let scale = (bw / ow).max(bh / oh);
     let (sw, sh) = (ow * scale, oh * scale);
     (
@@ -304,7 +316,11 @@ fn auto_motion(shot: Shot, p: &str, seed: u32) -> (String, String, String) {
     let e = format!("({p})*({p})*(3-2*({p}))");
     // Start and end of the middle of the frame (0..1)
     let ((sx, sy), (ex, ey), z1) = match (shot.focus, shot.portrait) {
-        (Some((fx, fy)), false) => ((if fx >= 0.5 { 0.0 } else { 1.0 }, 0.5), (fx, fy), AUTO_ZOOM_END),
+        (Some((fx, fy)), false) => (
+            (if fx >= 0.5 { 0.0 } else { 1.0 }, 0.5),
+            (fx, fy),
+            AUTO_ZOOM_END,
+        ),
         (Some((fx, fy)), true) => ((0.5, 0.0), (fx, fy), AUTO_ZOOM_END),
         (None, false) if seed % 2 == 1 => ((1.0, 0.5), (0.0, 0.5), AUTO_ZOOM_END_NO_FACE),
         (None, false) => ((0.0, 0.5), (1.0, 0.5), AUTO_ZOOM_END_NO_FACE),
@@ -313,7 +329,10 @@ fn auto_motion(shot: Shot, p: &str, seed: u32) -> (String, String, String) {
     let z0 = AUTO_ZOOM_START;
     let z = format!("{z0}+{:.4}*{e}", z1 - z0);
     let along = |s: f64, t: f64, size: &str| {
-        format!("clip(({s:.4}+{:.4}*{e})*{size}-{size}/zoom/2,0,{size}-{size}/zoom)", t - s)
+        format!(
+            "clip(({s:.4}+{:.4}*{e})*{size}-{size}/zoom/2,0,{size}-{size}/zoom)",
+            t - s
+        )
     };
     (z, along(sx, ex, "iw"), along(sy, ey, "ih"))
 }
@@ -361,7 +380,8 @@ pub async fn prepare_background(
         let img = img
             .resize_to_fill(bw, bh, image::imageops::FilterType::Lanczos3)
             .to_rgb8();
-        img.save_with_format(&dest, image::ImageFormat::Jpeg).map_err(img_err)?;
+        img.save_with_format(&dest, image::ImageFormat::Jpeg)
+            .map_err(img_err)?;
         Ok(shot)
     })
     .await
@@ -463,7 +483,10 @@ pub fn build_card(
             );
             let dim = card.dim.clamp(0.0, 0.9);
             if dim > 0.0 {
-                f.push_str(&format!(",drawbox=x=0:y=0:w=iw:h=ih:color=black@{:.2}:t=fill", dim));
+                f.push_str(&format!(
+                    ",drawbox=x=0:y=0:w=iw:h=ih:color=black@{:.2}:t=fill",
+                    dim
+                ));
             }
             (vec!["-i".to_string(), bg.to_string_lossy().to_string()], f)
         }
@@ -518,7 +541,10 @@ pub fn build_card(
         let gap = big * 0.45;
         let line_h = |s: f64| s * 1.35;
         let used: Vec<&(Vec<String>, f64)> = blocks.iter().filter(|(l, _)| !l.is_empty()).collect();
-        let total: f64 = used.iter().map(|(l, s)| l.len() as f64 * line_h(*s)).sum::<f64>()
+        let total: f64 = used
+            .iter()
+            .map(|(l, s)| l.len() as f64 * line_h(*s))
+            .sum::<f64>()
             + gap * (used.len().saturating_sub(1)) as f64;
         let mut y = ((h as f64 - total) / 2.0).max(0.0);
 
@@ -595,12 +621,22 @@ pub fn date_range(frames: &[std::path::PathBuf]) -> Option<String> {
     let date = |p: &std::path::PathBuf| -> Option<String> {
         let name = p.file_name()?.to_string_lossy().to_string();
         let d = name.get(..10)?;
-        let ok = d.char_indices().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() });
+        let ok = d.char_indices().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                c == '-'
+            } else {
+                c.is_ascii_digit()
+            }
+        });
         ok.then(|| format!("{}.{}.{}", &d[8..10], &d[5..7], &d[..4]))
     };
     let first = date(frames.first()?)?;
     let last = date(frames.last()?)?;
-    Some(if first == last { first } else { format!("{} – {}", first, last) })
+    Some(if first == last {
+        first
+    } else {
+        format!("{} – {}", first, last)
+    })
 }
 
 /// The card with its date line added below the longer text, if it wants one.
@@ -609,13 +645,22 @@ pub fn with_dates(card: &TitleCardConfig, range: Option<&str>) -> TitleCardConfi
     if card.dates {
         if let Some(range) = range {
             let text = card.text.trim_end();
-            card.text = if text.is_empty() { range.to_string() } else { format!("{}\n\n{}", text, range) };
+            card.text = if text.is_empty() {
+                range.to_string()
+            } else {
+                format!("{}\n\n{}", text, range)
+            };
         }
     }
     card
 }
 
-pub async fn render_preview(card: &TitleCardConfig, api: &ApiConfig, w: u32, h: u32) -> Result<Vec<u8>> {
+pub async fn render_preview(
+    card: &TitleCardConfig,
+    api: &ApiConfig,
+    w: u32,
+    h: u32,
+) -> Result<Vec<u8>> {
     let work = WorkDir::new()?;
     let fps = 25;
     // The real dates are known only when the video is made
@@ -664,12 +709,18 @@ mod tests {
     fn font_names_are_readable() {
         assert_eq!(font_display_name("DejaVuSans-Bold.ttf"), "DejaVu Sans Bold");
         assert_eq!(font_display_name("DejaVuSerif.ttf"), "DejaVu Serif");
-        assert_eq!(font_display_name("Open_Sans-Regular.otf"), "Open Sans Regular");
+        assert_eq!(
+            font_display_name("Open_Sans-Regular.otf"),
+            "Open Sans Regular"
+        );
     }
 
     #[test]
     fn wraps_by_words() {
-        assert_eq!(wrap_text("eins zwei drei vier", 9), vec!["eins zwei", "drei vier"]);
+        assert_eq!(
+            wrap_text("eins zwei drei vier", 9),
+            vec!["eins zwei", "drei vier"]
+        );
         assert_eq!(wrap_text("  ", 10), Vec::<String>::new());
         assert_eq!(wrap_text("Donaudampfschiff", 5), vec!["Donaudampfschiff"]);
     }
@@ -708,7 +759,18 @@ mod tests {
             ..TitleCardConfig::default()
         };
         let bg = (Path::new("/tmp/bg.jpg"), Shot::default());
-        let c = build_card(&card, Some(bg), 640, 360, 25, Path::new("/tmp"), "t", 1, "o").unwrap();
+        let c = build_card(
+            &card,
+            Some(bg),
+            640,
+            360,
+            25,
+            Path::new("/tmp"),
+            "t",
+            1,
+            "o",
+        )
+        .unwrap();
         assert_eq!(c.args, vec!["-i", "/tmp/bg.jpg"]);
         assert!(c.filter.contains("zoompan=z='1+0.12*on/50'"));
         assert!(c.filter.contains("color=black@0.15"));
@@ -721,29 +783,49 @@ mod tests {
             motion: m.to_string(),
             ..TitleCardConfig::default()
         };
-        assert_eq!(motion(&card(false, "pan_right"), Shot::default(), 50, 0).0, "1");
-        assert_eq!(motion(&card(true, "zoom"), Shot::default(), 50, 0).0, "1+0.12*on/50");
+        assert_eq!(
+            motion(&card(false, "pan_right"), Shot::default(), 50, 0).0,
+            "1"
+        );
+        assert_eq!(
+            motion(&card(true, "zoom"), Shot::default(), 50, 0).0,
+            "1+0.12*on/50"
+        );
         let (z, x, y) = motion(&card(true, "pan_right"), Shot::default(), 50, 0);
         assert_eq!(z, "1.2+0.04*on/50");
         assert_eq!(x, "(iw-iw/zoom)*on/50");
         assert_eq!(y, "ih/2-(ih/zoom/2)");
-        assert_eq!(motion(&card(true, "pan_up"), Shot::default(), 50, 0).2, "(ih-ih/zoom)*(1-on/50)");
+        assert_eq!(
+            motion(&card(true, "pan_up"), Shot::default(), 50, 0).2,
+            "(ih-ih/zoom)*(1-on/50)"
+        );
         for seed in 0..8 {
-            assert!(motion(&card(true, "random"), Shot::default(), 50, seed).0.starts_with("1.2+"));
+            assert!(motion(&card(true, "random"), Shot::default(), 50, seed)
+                .0
+                .starts_with("1.2+"));
         }
         // auto, landscape with a face on the right: from the left edge to the face
-        let shot = Shot { portrait: false, focus: Some((0.7, 0.4)) };
+        let shot = Shot {
+            portrait: false,
+            focus: Some((0.7, 0.4)),
+        };
         let (z, x, y) = motion(&card(true, "auto"), shot, 50, 0);
         assert!(z.starts_with("1.15+0.3000*"));
         assert!(x.starts_with("clip((0.0000+0.7000*"));
         assert!(y.starts_with("clip((0.5000+-0.1000*"));
         // auto, portrait without a face: top to bottom
-        let shot = Shot { portrait: true, focus: None };
+        let shot = Shot {
+            portrait: true,
+            focus: None,
+        };
         let (_, x, y) = motion(&card(true, "auto"), shot, 50, 0);
         assert!(x.starts_with("clip((0.5000+0.0000*"));
         assert!(y.starts_with("clip((0.0000+1.0000*"));
         // Old configs without `motion` keep the zoom into the middle
-        assert_eq!(motion(&card(true, ""), Shot::default(), 50, 0).0, "1+0.12*on/50");
+        assert_eq!(
+            motion(&card(true, ""), Shot::default(), 50, 0).0,
+            "1+0.12*on/50"
+        );
     }
 
     #[test]

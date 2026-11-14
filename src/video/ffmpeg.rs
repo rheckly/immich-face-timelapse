@@ -128,9 +128,8 @@ where
 
         if let Some(work) = &work {
             // Title cards: everything at one constant frame rate, joined with concat
-            let (w, h) = image::image_dimensions(&image_files[0]).map_err(|e| {
-                Error::VideoCompilation(format!("Cannot read frame size: {}", e))
-            })?;
+            let (w, h) = image::image_dimensions(&image_files[0])
+                .map_err(|e| Error::VideoCompilation(format!("Cannot read frame size: {}", e)))?;
             let fps = (framerate.round() as u32).clamp(25, 120);
             filters.push(format!(
                 "[0:v]fps={fps},scale={w}:{h},setsar=1,format=yuv420p,setpts=PTS-STARTPTS[vmain]"
@@ -458,7 +457,9 @@ mod part_path_tests {
     #[test]
     fn keeps_the_extension() {
         assert_eq!(
-            part_path(Path::new("/out/anna_2026-11-12_1430/anna_2026-11-12_1430.mp4")),
+            part_path(Path::new(
+                "/out/anna_2026-11-12_1430/anna_2026-11-12_1430.mp4"
+            )),
             Path::new("/out/anna_2026-11-12_1430/anna_2026-11-12_1430.part.mp4")
         );
     }

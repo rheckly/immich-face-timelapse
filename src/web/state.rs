@@ -432,7 +432,10 @@ mod job_slot_tests {
 
         // The old job finishes after the new one has started
         state.clear_cancel_token(old).await;
-        assert!(state.request_cancel().await, "new job must stay cancellable");
+        assert!(
+            state.request_cancel().await,
+            "new job must stay cancellable"
+        );
         assert!(new_token.is_cancelled());
 
         state.clear_cancel_token(new).await;

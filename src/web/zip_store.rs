@@ -14,15 +14,19 @@ fn crc32(data: &[u8]) -> u32 {
         for (i, v) in t.iter_mut().enumerate() {
             let mut c = i as u32;
             for _ in 0..8 {
-                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 != 0 {
+                    0xEDB8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
             }
             *v = c;
         }
         t
     });
-    !data
-        .iter()
-        .fold(!0u32, |c, &b| table[((c ^ u32::from(b)) & 0xFF) as usize] ^ (c >> 8))
+    !data.iter().fold(!0u32, |c, &b| {
+        table[((c ^ u32::from(b)) & 0xFF) as usize] ^ (c >> 8)
+    })
 }
 
 /// MS-DOS time and date of a file.
@@ -49,7 +53,8 @@ fn common(h: &mut Vec<u8>, time: u16, date: u16, crc: u32, size: u32, name_len: 
 /// Write `files` (name in the archive, file on disk) to `out`.
 pub fn write_stored(out: &Path, files: &[(String, PathBuf)]) -> io::Result<()> {
     let too_big = || io::Error::other("ZIP would be larger than 4 GB");
-    let count = u16::try_from(files.len()).map_err(|_| io::Error::other("too many files for a ZIP"))?;
+    let count =
+        u16::try_from(files.len()).map_err(|_| io::Error::other("too many files for a ZIP"))?;
     let mut w = BufWriter::new(std::fs::File::create(out)?);
     let mut offset: u64 = 0;
     let mut central = Vec::new();
@@ -64,7 +69,8 @@ pub fn write_stored(out: &Path, files: &[(String, PathBuf)]) -> io::Result<()> {
         let size = u32::try_from(data.len()).map_err(|_| too_big())?;
         let at = u32::try_from(offset).map_err(|_| too_big())?;
         let n = name.as_bytes();
-        let name_len = u16::try_from(n.len()).map_err(|_| io::Error::other("file name too long"))?;
+        let name_len =
+            u16::try_from(n.len()).map_err(|_| io::Error::other("file name too long"))?;
 
         let mut h = Vec::with_capacity(30 + n.len());
         h.extend_from_slice(&0x0403_4b50u32.to_le_bytes());

@@ -44,7 +44,9 @@ use config::{get_config, get_config_defaults, update_config};
 use health::{check_connection, health_check, version_info};
 use music::{list_music_tracks, upload_music_track, MAX_UPLOAD_BYTES};
 use output::{
-    cleanup_all_output, cleanup_output_folder, compile_folder_video, delete_images_bulk, delete_single_image, get_run_info, get_selection, list_folder_images, list_output_folders, put_selection,
+    cleanup_all_output, cleanup_output_folder, compile_folder_video, delete_images_bulk,
+    delete_single_image, get_run_info, get_selection, list_folder_images, list_output_folders,
+    put_selection,
 };
 use people::{get_people, get_person_asset_count, get_person_thumbnail};
 use preview::{preview, preview_samples};
@@ -209,12 +211,14 @@ fn origin_allowed(origin: &str, headers: &HeaderMap) -> bool {
     if matches!(name, "localhost" | "127.0.0.1" | "[::1]") {
         return true;
     }
-    [header::HOST.as_str(), "x-forwarded-host"].iter().any(|key| {
-        headers
-            .get(*key)
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| v.split(',').any(|h| h.trim().eq_ignore_ascii_case(host)))
-    })
+    [header::HOST.as_str(), "x-forwarded-host"]
+        .iter()
+        .any(|key| {
+            headers
+                .get(*key)
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|v| v.split(',').any(|h| h.trim().eq_ignore_ascii_case(host)))
+        })
 }
 
 /// Serve index.html for SPA routing.
@@ -259,7 +263,10 @@ mod origin_tests {
 
     #[test]
     fn forwarded_host_is_allowed() {
-        let h = headers(&[("host", "timelapse:5000"), ("x-forwarded-host", "timelapse.example.org")]);
+        let h = headers(&[
+            ("host", "timelapse:5000"),
+            ("x-forwarded-host", "timelapse.example.org"),
+        ]);
         assert!(origin_allowed("https://timelapse.example.org", &h));
     }
 

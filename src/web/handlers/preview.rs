@@ -443,7 +443,10 @@ fn problem_text(reason: &str, detail: Option<&str>) -> String {
 
 /// Whether the photo would be used: no step stopped and every switched-on filter passed.
 fn would_be_used(filters: &[FilterVerdict], problem: &Option<String>) -> bool {
-    problem.is_none() && filters.iter().all(|f| !f.enabled || f.passed != Some(false))
+    problem.is_none()
+        && filters
+            .iter()
+            .all(|f| !f.enabled || f.passed != Some(false))
 }
 
 /// Preview the quality filters and the resulting frame on one photo.
@@ -486,7 +489,12 @@ pub async fn preview(
         .transpose()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     let millis = started.elapsed().as_millis() as u64;
-    tracing::debug!("Preview of {} took {} ms (cached: {})", request.asset_id, millis, cached);
+    tracing::debug!(
+        "Preview of {} took {} ms (cached: {})",
+        request.asset_id,
+        millis,
+        cached
+    );
 
     Ok(Json(PreviewResponse {
         asset_id: request.asset_id,
@@ -683,7 +691,10 @@ mod tests {
             problem_text("landmarks_failed", Some("no face")),
             "The eyes could not be found in this photo (no face)."
         );
-        assert_eq!(problem_text("alignment", None), "The face could not be aligned.");
+        assert_eq!(
+            problem_text("alignment", None),
+            "The face could not be aligned."
+        );
     }
 
     #[test]
