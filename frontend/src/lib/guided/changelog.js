@@ -6,8 +6,20 @@
 // Work that is not pushed yet goes into the entry with `released: false`; on
 // a release (push to happy-pc) set `released: true`, the date and the version
 // from Cargo.toml, and start a new unreleased entry when the next change comes.
+// The GitHub release of a version tag (ft-v1.2.3) gets its notes from here
+// (scripts/release-notes.mjs, job "GitHub release" in ghcr.yml).
 
 export const CHANGELOG = [
+  {
+    version: '1.0.3',
+    date: '2026-11-15',
+    released: true,
+    changes: [
+      { type: 'NEW', de: `GitHub-Releases: Jeder Versions-Tag (ft-v…) bekommt nach dem Image-Build ein Release mit den Änderungen aus diesem Changelog, auf Englisch und Deutsch.`, en: `GitHub releases: every version tag (ft-v…) gets a release after the image build, with the changes from this changelog in English and German.` },
+      { type: 'CHG', de: `README mit Abschnitt «How this was built»: Der Fork entsteht KI-gestützt, grösstenteils mit Claude (Anthropic, v. a. Claude Opus 5.5) über Claude Code, getestet, aber nicht Zeile für Zeile geprüft.`, en: `README with a section "How this was built": the fork is AI-assisted, written mostly with Claude (Anthropic, mostly Claude Opus 5.5) using Claude Code, tested but not audited line by line.` },
+      { type: 'CHG', de: `Die Programmdatei im Container heisst neu «immich-face-timelapse»; wer sie für die Entwicklung per Volume ersetzt, muss den Pfad im Compose anpassen.`, en: `The program file in the container is now called "immich-face-timelapse"; if you replace it with a volume for development, update the path in your compose file.` },
+    ],
+  },
   {
     version: '1.0.2',
     date: '2026-11-14',

@@ -40,7 +40,7 @@ RUN touch src/main.rs src/lib.rs && cargo build --release
 # Only the build artifacts, for scripts/deploy-nas.sh
 # (docker build --target dev-export --output type=local,dest=build/nas .)
 FROM scratch AS dev-export
-COPY --from=rust-build /app/target/release/immich-timelapse /
+COPY --from=rust-build /app/target/release/immich-face-timelapse /
 COPY --from=frontend-build /app/frontend/dist/ /dist/
 
 # Stage 3: Runtime image
@@ -101,7 +101,7 @@ RUN mkdir -p models && \
     apt-get purge -y --autoremove bzip2
 
 # Copy artifacts from build stages
-COPY --from=rust-build /app/target/release/immich-timelapse ./
+COPY --from=rust-build /app/target/release/immich-face-timelapse ./
 COPY --from=frontend-build /app/frontend/dist/ ./frontend/dist/
 
 RUN mkdir -p output config music
@@ -110,4 +110,4 @@ RUN mkdir -p output config music
 EXPOSE 5000 5001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fs http://localhost:5000/api/health || exit 1
-CMD ["./immich-timelapse"]
+CMD ["./immich-face-timelapse"]

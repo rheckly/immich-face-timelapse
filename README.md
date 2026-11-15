@@ -226,6 +226,13 @@ This fork started from the original `master` and went its own way:
 
 Changes are not sent back upstream automatically. Issues about this fork belong here, not in the original project.
 
+## How this was built
+
+This fork is AI-assisted. The changes since the fork were written mostly by Claude (Anthropic), mostly Claude
+Opus 5.5, using [Claude Code](https://claude.com/claude-code). I set the requirements and reviewed and tested every
+release on my own Immich instance. The code has not been audited line by line, so please review it before you use
+it on a library you care about.
+
 ## Thanks
 
 - **Arnaud Cayrol** ([ArnaudCrl](https://github.com/ArnaudCrl)) for the original

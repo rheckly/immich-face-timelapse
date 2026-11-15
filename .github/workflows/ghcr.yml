@@ -172,6 +172,35 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
 
+  release:
+    name: GitHub release
+    # Only for own release tags, after the image is published
+    if: startsWith(github.ref, 'refs/tags/ft-v')
+    runs-on: ubuntu-latest
+    needs: merge
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Notes from frontend/src/lib/guided/changelog.js (About → Changelog)
+          node scripts/release-notes.mjs "$TAG" > notes.md
+          title="Face-Timelapse ${TAG#ft-v}"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --title "$title" --notes-file notes.md --latest
+          else
+            gh release create "$TAG" --title "$title" --notes-file notes.md --latest --verify-tag
+          fi
+
   cleanup:
     name: Keep only the last 3 versions
     runs-on: ubuntu-latest

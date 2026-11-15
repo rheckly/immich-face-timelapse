@@ -2,7 +2,7 @@
 //!
 //! Web server for creating selfie timelapses from Immich.
 
-use immich_timelapse::{
+use immich_face_timelapse::{
     config::{Config, CONFIG_PATH},
     error::PERMISSION_HINT,
     models::DlibLandmarks,
@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "immich_timelapse=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "immich_face_timelapse=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -64,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
     check_output_dir(&config);
 
     // Check ffmpeg availability
-    match immich_timelapse::video::check_ffmpeg().await {
+    match immich_face_timelapse::video::check_ffmpeg().await {
         Ok(version) => tracing::info!("FFmpeg available: {}", version),
         Err(e) => tracing::warn!("FFmpeg not available: {} - video compilation will fail", e),
     }
