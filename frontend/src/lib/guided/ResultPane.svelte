@@ -4,7 +4,7 @@
   import { shares, sharesOf, formatDate, copyText } from './shares.svelte.js';
 
   // stamp changes whenever the result may have changed, so the video is not served from the cache
-  let { folderName, folder = null, stamp = 0, photosOpen = false, onphotos, shareOpen = false, onshare } = $props();
+  let { folderName, folder = null, stamp = 0, photosOpen = false, onphotos, shareOpen = false, onshare, stale = false, onrecreate } = $props();
 
   let links = $derived(sharesOf(folderName));
   let copied = $state(false);
@@ -26,6 +26,10 @@
   });
 </script>
 
+{#if stale}
+  <p class="muted" style="margin:0 0 6px">{t('result.stale')}</p>
+  <div class="btnRow" style="margin-bottom:10px"><button type="button" onclick={onrecreate}>{t('result.recreate')}</button></div>
+{/if}
 {#if failed}
   <div class="videoMissing">
     <p>{t('result.none')}</p>

@@ -11,6 +11,26 @@
 
 export const CHANGELOG = [
   {
+    version: '1.0.4',
+    date: '2026-11-15',
+    released: true,
+    changes: [
+      { type: 'NEW', de: `Optionaler Login mit einem Benutzer (Umgebungsvariablen LOGIN_USER und LOGIN_PASSWORD): Login-Seite im gleichen Aussehen wie Mosaik und Reels, «Angemeldet bleiben» für 30 Tage und Sperre nach 5 Fehlversuchen in 10 Minuten. Ohne LOGIN_PASSWORD bleibt alles offen wie bisher; die Share-Links auf Port 5001 brauchen nie einen Login. Die Einrichtung steht im README unter «Login».`, en: `Optional login with one user (environment variables LOGIN_USER and LOGIN_PASSWORD): login page with the same look as Mosaik and Reels, "Stay signed in" for 30 days and a lock after 5 failed attempts in 10 minutes. Without LOGIN_PASSWORD everything stays open as before; share links on port 5001 never need a login. The README explains the setup under "Login".` },
+      { type: 'NEW', de: `Profil-Button oben rechts in der Kopfzeile: die Initialen des angemeldeten Benutzers, im Menü Name und «Abmelden». Den Anzeigenamen setzt die Umgebungsvariable LOGIN_NAME.`, en: `Profile button at the top right of the header: the initials of the signed-in user, with name and "Sign out" in its menu. The environment variable LOGIN_NAME sets the display name.` },
+      { type: 'CHG', de: `Sprachschalter DE|EN in der Kopfzeile etwas flacher, wie bei Mosaik.`, en: `Language switch EN|DE in the header slightly lower, as in Mosaik.` },
+      { type: 'NEW', de: `Login- und Share-Seiten zeigen im Browser-Tab das Timelapse-Logo als Icon.`, en: `Login and share pages show the Timelapse logo as icon in the browser tab.` },
+      { type: 'NEW', de: `Neue Box «Geteilte Timelapse» unter den Einstellungen: alle geteilten Links mit Zeitraffer, Erstelldatum, Gültigkeit (Restzeit, «unbegrenzt» oder ausgegraut «abgelaufen») und Aufrufen; Link kopieren, öffnen, Gültigkeit ändern und löschen, Filter Aktiv/Abgelaufen/Alle und «Abgelaufene löschen».`, en: `New "Shared timelapses" box below Settings: every shared link with its timelapse, creation date, validity (time left, "unlimited" or greyed out "expired") and views; copy, open, change validity and delete, filter Active/Expired/All and "Delete expired".` },
+      { type: 'NEW', de: `Geteilte Links zählen ihre Aufrufe mit Zeitpunkt des letzten Aufrufs. Es zählt nur das Öffnen der Seite, nicht Bots und Link-Vorschauen (z. B. WhatsApp, Slack), und dieselbe Adresse nur einmal pro 30 Minuten; IP-Adressen werden nicht gespeichert.`, en: `Shared links count their views, with the time of the last one. Only opening the page counts, not bots and link previews (e.g. WhatsApp, Slack), and the same address only once per 30 minutes; IP addresses are not stored.` },
+      { type: 'CHG', de: `Wer einen Zeitraffer aus dem Verlauf zum Bearbeiten öffnet, kann direkt zum Ergebnis und das vorhandene Video ansehen, herunterladen und teilen, ohne es neu zu erstellen; sind die Einstellungen seither geändert, schlägt das Ergebnis vor, es neu zu erstellen.`, en: `When you open a timelapse from the history to edit it, you can go straight to the result and watch, download and share the existing video without creating it again; if the settings have changed since, the result suggests creating it again.` },
+      { type: 'CHG', de: `Login-Seite und Share-Seiten in den Farben der App (hell und dunkel, Akzent Blaugrau wie Mosaik) statt immer dunkel mit hellblauem Akzent.`, en: `Login page and share pages use the app colours (light and dark, blue-grey accent as in Mosaik) instead of always dark with a light-blue accent.` },
+      { type: 'CHG', de: `Neues Logo aus der gemeinsamen Vorlage mit Mosaik und Reels: als Icon in Kopfzeile und Browser-Tab (passend zu hell/dunkel), als Schriftzug auf Login- und Share-Seiten und als Vorschaubild, wenn man die App verlinkt.`, en: `New logo from the shared template with Mosaik and Reels: as icon in the header and browser tab (matching light/dark), as word mark on the login and share pages, and as preview image when the app is linked.` },
+      { type: 'CHG', de: `Oben links steht unter dem Namen der Untertitel «Face timelapses from your Immich library», auch auf der Login-Seite; App und Browser-Tab heissen kurz «Face-Timelapse», wie bei den übrigen Immich-Diensten.`, en: `The subtitle "Face timelapses from your Immich library" now appears under the name at the top left and on the login page; the app and browser tab are simply called "Face-Timelapse", like the other Immich services.` },
+      { type: 'CHG', de: `Logo und Name oben links führen zurück zum Anfang und schliessen alle Panels.`, en: `Logo and name at the top left lead back to the start and close all panels.` },
+      { type: 'CHG', de: `Erledigte Schritte zeigen ein grünes Häkchen hinter dem Titel.`, en: `Completed steps show a green tick after their title.` },
+      { type: 'CHG', de: `Die linke Spalte passt ihre Breite dem Fenster an (300 bis 380 Pixel), und alle Umschalter haben dieselbe Form wie bei Mosaik.`, en: `The left column adapts its width to the window (300 to 380 pixels), and all switches have the same shape as in Mosaik.` },
+    ],
+  },
+  {
     version: '1.0.3',
     date: '2026-11-15',
     released: true,

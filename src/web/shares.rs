@@ -5,25 +5,33 @@
 //! address under which they are reachable.
 //!
 //! Two routers use them:
-//! - [`api_routes`] on the main (internal) port: create, change, revoke.
+//! - [`api_routes`] on the main (internal) port: list, create, change,
+//!   revoke, and remove all expired links.
 //! - [`public_router`] on a separate port, meant to be published on the
 //!   internet: serves only `/s/<token>` (a page with player and link
 //!   preview), its video and its poster image, and - when the link allows
 //!   it - the edited photos as ZIP. Nothing else is reachable.
+//!
+//! Views: each share counts how often its page was opened (`views`,
+//! `last_viewed_at`). Only the HTML page counts (no video, poster or range
+//! requests, no HEAD), not bots or link previews, and the same address only
+//! once per 30 minutes. Addresses are kept in memory for that, never stored.
 
 use crate::config::CONFIG_PATH;
 use crate::web::state::{validate_path_component, AppState};
 use axum::{
     body::Body,
-    extract::{Path, Request, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    extract::{ConnectInfo, Path, Request, State},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     response::{Html, IntoResponse, Json, Response},
-    routing::{get, patch, put},
+    routing::{delete, get, patch, put},
     Router,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
+use std::time::Instant;
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -61,6 +69,12 @@ pub struct Share {
     /// The share page offers the edited photos as ZIP.
     #[serde(default)]
     pub photos: bool,
+    /// How often the share page was opened (see [`counts_as_view`]).
+    #[serde(default)]
+    pub views: u64,
+    /// When the share page was last opened.
+    #[serde(default)]
+    pub last_viewed_at: Option<DateTime<Utc>>,
 }
 
 impl Share {
@@ -168,6 +182,8 @@ pub struct ShareInfo {
     pub share: Share,
     /// Full link, `None` while no public address is set.
     pub url: Option<String>,
+    /// Past its expiry: the link shows the "not valid" page until it is deleted.
+    pub expired: bool,
 }
 
 #[derive(Serialize)]
@@ -179,7 +195,26 @@ pub struct SharesResponse {
 
 fn info(share: Share, public_url: &str) -> ShareInfo {
     let url = (!public_url.is_empty()).then(|| format!("{public_url}/s/{}", share.token));
-    ShareInfo { share, url }
+    let expired = share.is_expired(Utc::now());
+    ShareInfo {
+        share,
+        url,
+        expired,
+    }
+}
+
+/// Removes the share with this token; `false` when there is none.
+fn remove_share(store: &mut ShareStore, token: &str) -> bool {
+    let before = store.shares.len();
+    store.shares.retain(|s| s.token != token);
+    store.shares.len() != before
+}
+
+/// Removes all shares expired at `now`; returns how many.
+fn remove_expired(store: &mut ShareStore, now: DateTime<Utc>) -> usize {
+    let before = store.shares.len();
+    store.shares.retain(|s| !s.is_expired(now));
+    before - store.shares.len()
 }
 
 pub fn share_port() -> u16 {
@@ -194,27 +229,27 @@ pub fn api_routes() -> Router<AppState> {
     Router::new()
         .route("/api/shares", get(list_shares).post(create_share))
         .route("/api/shares/settings", put(update_settings))
+        .route("/api/shares/expired", delete(delete_expired))
         .route(
             "/api/shares/{token}",
             patch(update_share).delete(delete_share),
         )
 }
 
-/// All active shares. Expired ones and those whose video is gone are dropped.
+/// All shares, expired ones included (marked `expired`, so they can be
+/// looked at and deleted). Shares whose video is gone are dropped.
 async fn list_shares(
     State(state): State<AppState>,
 ) -> Result<Json<SharesResponse>, (StatusCode, String)> {
     let output_dir = state.config.read().await.output_dir.clone();
     let _guard = LOCK.lock().await;
     let mut store = load().await;
-    let now = Utc::now();
     let before = store.shares.len();
     let mut keep = Vec::with_capacity(before);
     for s in store.shares.drain(..) {
-        if !s.is_expired(now)
-            && tokio::fs::metadata(video_path(&output_dir, &s.folder))
-                .await
-                .is_ok()
+        if tokio::fs::metadata(video_path(&output_dir, &s.folder))
+            .await
+            .is_ok()
         {
             keep.push(s);
         }
@@ -289,6 +324,8 @@ async fn create_share(
         expires_at: expiry(req.days, now)?,
         download: req.download,
         photos: req.photos,
+        views: 0,
+        last_viewed_at: None,
     };
     let _guard = LOCK.lock().await;
     let mut store = load().await;
@@ -349,14 +386,110 @@ async fn update_share(
 async fn delete_share(Path(token): Path<String>) -> Result<StatusCode, (StatusCode, String)> {
     let _guard = LOCK.lock().await;
     let mut store = load().await;
-    let before = store.shares.len();
-    store.shares.retain(|s| s.token != token);
-    if store.shares.len() == before {
+    if !remove_share(&mut store, &token) {
         return Err((StatusCode::NOT_FOUND, "Link nicht gefunden".into()));
     }
     save(&store).await?;
     tracing::info!("Share revoked");
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Deletes all expired shares; answers with `{ "removed": n }`.
+async fn delete_expired() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let _guard = LOCK.lock().await;
+    let mut store = load().await;
+    let removed = remove_expired(&mut store, Utc::now());
+    if removed > 0 {
+        save(&store).await?;
+        tracing::info!("Removed {removed} expired shares");
+    }
+    Ok(Json(serde_json::json!({ "removed": removed })))
+}
+
+// ---------------------------------------------------------------------------
+// Views
+// ---------------------------------------------------------------------------
+
+/// Repeated opens from the same address within this time count once.
+const VIEW_WINDOW: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+/// Last counted open per (token, address); only in memory.
+static RECENT_VIEWS: std::sync::Mutex<Option<std::collections::HashMap<(String, IpAddr), Instant>>> =
+    std::sync::Mutex::new(None);
+
+/// User agents of bots, crawlers and link previews (messengers, social networks).
+fn is_bot(user_agent: &str) -> bool {
+    const MARKERS: &[&str] = &[
+        "bot", "crawler", "spider", "preview", "whatsapp", "slack", "telegram",
+        "facebookexternalhit", "facebookcatalog", "discord", "skype", "linkedin",
+        "pinterest", "embedly", "vkshare", "quora link", "outbrain", "headless",
+        "lighthouse", "curl", "wget", "python-requests", "go-http-client",
+    ];
+    let ua = user_agent.to_ascii_lowercase();
+    ua.trim().is_empty() || MARKERS.iter().any(|m| ua.contains(m))
+}
+
+/// Whether a request for the share page is a view: not HEAD, not a bot.
+fn counts_as_view(method: &Method, headers: &HeaderMap) -> bool {
+    if method == Method::HEAD {
+        return false;
+    }
+    let ua = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    !is_bot(ua)
+}
+
+/// `true` when this address has not opened this link within [`VIEW_WINDOW`];
+/// remembers the open and forgets entries older than the window.
+fn first_view(
+    recent: &mut std::collections::HashMap<(String, IpAddr), Instant>,
+    token: &str,
+    ip: IpAddr,
+    now: Instant,
+) -> bool {
+    recent.retain(|_, t| now.duration_since(*t) < VIEW_WINDOW);
+    let key = (token.to_string(), ip);
+    if recent.contains_key(&key) {
+        return false;
+    }
+    recent.insert(key, now);
+    true
+}
+
+/// Adds one view to the share; `false` when it is gone.
+fn add_view(store: &mut ShareStore, token: &str, now: DateTime<Utc>) -> bool {
+    match store.shares.iter_mut().find(|s| s.token == token) {
+        Some(s) => {
+            s.views += 1;
+            s.last_viewed_at = Some(now);
+            true
+        }
+        None => false,
+    }
+}
+
+/// Counts an open of the share page, if it is a view (see the module doc).
+async fn record_view(token: &str, method: &Method, headers: &HeaderMap, peer: Option<IpAddr>) {
+    if !counts_as_view(method, headers) {
+        return;
+    }
+    let ip = crate::web::auth::client_ip(peer, headers);
+    let first = {
+        let mut guard = RECENT_VIEWS.lock().unwrap_or_else(|e| e.into_inner());
+        first_view(guard.get_or_insert_with(Default::default), token, ip, Instant::now())
+    };
+    if !first {
+        return;
+    }
+    let _guard = LOCK.lock().await;
+    let mut store = load().await;
+    if add_view(&mut store, token, Utc::now()) {
+        if let Err((_, e)) = save(&store).await {
+            tracing::warn!("Cannot count share view: {e}");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +503,7 @@ pub fn public_router(state: AppState) -> Router {
         .route("/s/{token}/video.mp4", get(share_video))
         .route("/s/{token}/poster.jpg", get(share_poster))
         .route("/s/{token}/photos.zip", get(share_photos))
+        .route("/favicon.svg", get(crate::web::auth::favicon))
         .route(
             "/robots.txt",
             get(|| async { "User-agent: *\nDisallow: /\n" }),
@@ -490,11 +624,17 @@ async fn share_page(
     State(state): State<AppState>,
     Path(token): Path<String>,
     headers: HeaderMap,
+    req: Request,
 ) -> Response {
     let (share, _) = match lookup(&state, &token).await {
         Lookup::Found(s, v) => (s, v),
         other => return not_available(other),
     };
+    let peer = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0.ip());
+    record_view(&share.token, req.method(), &headers, peer).await;
     let base = format!("{}/s/{}", origin(&headers), share.token);
     let title = if share.title.is_empty() {
         "Zeitraffer".to_string()
@@ -529,6 +669,7 @@ async fn share_page(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>{t}</title>
 <meta property="og:type" content="video.other">
 <meta property="og:title" content="{t}">
@@ -541,14 +682,19 @@ async fn share_page(
 <meta property="og:video:type" content="video/mp4">
 <meta name="twitter:card" content="summary_large_image">
 {umami}<style>
-  :root {{ color-scheme: dark; }}
-  html, body {{ margin: 0; background: #0f0f10; color: #e8e8ea; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }}
+  /* App palette (Mosaik design template), follows the system theme */
+  :root {{ --bg: #f4f4f2; --card: #fff; --text: #23272b; --muted: #667; --line: #dcdcd8; --accent: #2f6f8f; --on-accent: #fff; --shadow: rgba(0, 0, 0, .15); color-scheme: light; }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{ --bg: #17191b; --card: #222528; --text: #e8e8e6; --muted: #a0a4a8; --line: #3a3e42; --accent: #6db3d6; --on-accent: #111; --shadow: rgba(0, 0, 0, .5); color-scheme: dark; }}
+  }}
+  html, body {{ margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }}
   main {{ min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px; }}
   h1 {{ font-size: 1.15rem; font-weight: 600; margin: 0; text-align: center; }}
   video {{ width: 100%; max-width: min(960px, calc((100vh - 120px) * 1)); max-height: calc(100vh - 120px); border-radius: 10px; background: #000; }}
-  p {{ margin: 0; color: #9a9aa2; font-size: .85rem; }}
-  .dl {{ display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 999px; background: #2a2a2e; color: #e8e8ea; text-decoration: none; font-size: .9rem; font-weight: 600; }}
-  .dl:hover {{ background: #3a3a40; }}
+  p {{ margin: 0; color: var(--muted); font-size: .85rem; }}
+  .dl {{ display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: .9rem; font-weight: 600; }}
+  .dl:hover {{ border-color: var(--accent); color: var(--accent); }}
+  .dl:focus-visible {{ outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }}
   .dls {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }}
 </style>
 </head>
@@ -801,31 +947,33 @@ fn message_page(status: StatusCode, title: &str, paragraphs: &[&str]) -> Respons
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>Timelapse-Share</title>
 <style>
-  :root {{ --bg: #111; --card: #1c1c1c; --text: #f2f2f2; --muted: #aaa; --accent: #6aa9ff; }}
+  /* App palette (Mosaik design template), follows the system theme */
+  :root {{ --bg: #f4f4f2; --card: #fff; --text: #23272b; --muted: #667; --line: #dcdcd8; --accent: #2f6f8f; --on-accent: #fff; --shadow: rgba(0, 0, 0, .15); color-scheme: light; }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{ --bg: #17191b; --card: #222528; --text: #e8e8e6; --muted: #a0a4a8; --line: #3a3e42; --accent: #6db3d6; --on-accent: #111; --shadow: rgba(0, 0, 0, .5); color-scheme: dark; }}
+  }}
   * {{ box-sizing: border-box; }}
   html, body {{ margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
     font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }}
   body {{ display: flex; align-items: center; justify-content: center; min-height: 100vh;
     padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }}
   main {{ background: var(--card); border-radius: 14px; padding: 32px 28px; max-width: 460px; width: 100%; text-align: center;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, .5); }}
-  .frames {{ display: flex; gap: 4px; justify-content: center; align-items: center; margin-bottom: 18px; }}
-  .frames span {{ width: 16px; height: 22px; border-radius: 2px; background: var(--accent); }}
-  .frames span:nth-child(1) {{ opacity: .2; }} .frames span:nth-child(2) {{ opacity: .4; }}
-  .frames span:nth-child(3) {{ opacity: .6; }} .frames span:nth-child(4) {{ opacity: .8; }}
-  .frames i {{ width: 0; height: 0; margin-left: 4px; border-style: solid; border-width: 9px 0 9px 14px;
-    border-color: transparent transparent transparent var(--accent); }}
+    box-shadow: 0 10px 40px var(--shadow); }}
+  /* Word mark: brand/timelapse-logo.svg inline, in the accent of the theme */
+  .logo {{ height: 36px; display: flex; justify-content: center; align-items: center; margin-bottom: 18px; }}
+  .logo svg {{ fill: var(--accent); }}
   h1 {{ font-size: 22px; margin: 0 0 6px; font-weight: 600; }}
   .kicker {{ color: var(--muted); font-size: 13px; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 14px; }}
-  p {{ margin: 0 0 12px; color: #d6d6d6; }}
+  p {{ margin: 0 0 12px; color: var(--text); }}
   p.muted {{ color: var(--muted); font-size: 14px; margin: 18px 0 0; }}
 </style>
 </head>
 <body>
 <main>
-  <div class="frames" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><i></i></div>
+  <div class="logo" aria-hidden="true"><svg viewBox="0 0 118 22" width="118" height="22"><rect width="16" height="22" rx="2" opacity=".2"/><rect x="20" width="16" height="22" rx="2" opacity=".4"/><rect x="40" width="16" height="22" rx="2" opacity=".6"/><rect x="60" width="16" height="22" rx="2" opacity=".8"/><rect x="80" width="16" height="22" rx="2"/><path d="M104 2 118 11 104 20z"/></svg></div>
   <p class="kicker">Timelapse-Share</p>
   <h1>{t}</h1>
   {text}
@@ -878,6 +1026,8 @@ mod tests {
             expires_at: Some(now - Duration::seconds(1)),
             download: false,
             photos: false,
+            views: 0,
+            last_viewed_at: None,
         };
         assert_eq!(
             download_name(&Share {
@@ -899,6 +1049,172 @@ mod tests {
         let mut h = HeaderMap::new();
         h.insert("host", HeaderValue::from_static("evil\"<x>.ch"));
         assert_eq!(origin(&h), "https://evilx.ch");
+    }
+
+    fn share(token: &str, expires_at: Option<DateTime<Utc>>) -> Share {
+        Share {
+            token: token.into(),
+            folder: "Anna_2024-01-01_1200".into(),
+            title: String::new(),
+            created_at: Utc::now() - Duration::days(10),
+            expires_at,
+            download: false,
+            photos: false,
+            views: 0,
+            last_viewed_at: None,
+        }
+    }
+
+    #[test]
+    fn list_marks_expired_shares() {
+        let now = Utc::now();
+        let old = info(share("a", Some(now - Duration::days(1))), "https://x.ch");
+        let open = info(share("b", None), "");
+        let later = info(share("c", Some(now + Duration::days(1))), "https://x.ch");
+        assert!(old.expired);
+        assert_eq!(old.url.as_deref(), Some("https://x.ch/s/a"));
+        assert!(!open.expired);
+        assert_eq!(open.url, None);
+        assert!(!later.expired);
+        let json = serde_json::to_value(&old).unwrap();
+        assert_eq!(json["expired"], true);
+        assert_eq!(json["token"], "a");
+        assert_eq!(json["folder"], "Anna_2024-01-01_1200");
+    }
+
+    #[test]
+    fn bots_and_head_do_not_count() {
+        let ua = |v: &'static str| {
+            let mut h = HeaderMap::new();
+            h.insert(header::USER_AGENT, HeaderValue::from_static(v));
+            h
+        };
+        let firefox = ua("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0");
+        let iphone = ua("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148");
+        assert!(counts_as_view(&Method::GET, &firefox));
+        assert!(counts_as_view(&Method::GET, &iphone));
+        assert!(!counts_as_view(&Method::HEAD, &firefox));
+        assert!(!counts_as_view(&Method::GET, &HeaderMap::new()));
+        for bot in [
+            "WhatsApp/2.23.20.0 A",
+            "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
+            "TelegramBot (like TwitterBot)",
+            "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+            "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+            "Twitterbot/1.0",
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Mozilla/5.0 (compatible; SomeCrawler/1.0)",
+            "Mozilla/5.0 (compatible; link preview)",
+        ] {
+            assert!(!counts_as_view(&Method::GET, &ua(bot)), "{bot}");
+        }
+    }
+
+    #[test]
+    fn same_address_counts_once_per_30_minutes() {
+        let mut recent = std::collections::HashMap::new();
+        let t0 = Instant::now();
+        let a = IpAddr::from([10, 0, 0, 1]);
+        let b = IpAddr::from([10, 0, 0, 2]);
+        assert!(first_view(&mut recent, "x", a, t0));
+        assert!(!first_view(&mut recent, "x", a, t0 + std::time::Duration::from_secs(60)));
+        assert!(!first_view(&mut recent, "x", a, t0 + std::time::Duration::from_secs(29 * 60)));
+        // Another address, or another link from the same address, counts
+        assert!(first_view(&mut recent, "x", b, t0 + std::time::Duration::from_secs(60)));
+        assert!(first_view(&mut recent, "y", a, t0 + std::time::Duration::from_secs(60)));
+        // After 30 minutes it counts again
+        assert!(first_view(&mut recent, "x", a, t0 + std::time::Duration::from_secs(30 * 60)));
+    }
+
+    #[test]
+    fn views_are_stored_with_the_share() {
+        let now = Utc::now();
+        let mut store = ShareStore {
+            public_url: String::new(),
+            shares: vec![share("a", None)],
+        };
+        assert!(add_view(&mut store, "a", now));
+        assert!(add_view(&mut store, "a", now));
+        assert!(!add_view(&mut store, "zz", now));
+        assert_eq!(store.shares[0].views, 2);
+        assert_eq!(store.shares[0].last_viewed_at, Some(now));
+        // Old shares without the fields load with 0 views
+        let old: Share = serde_json::from_str(
+            r#"{"token":"a","folder":"f","created_at":"2026-01-01T00:00:00Z","expires_at":null}"#,
+        )
+        .unwrap();
+        assert_eq!(old.views, 0);
+        assert_eq!(old.last_viewed_at, None);
+        let json = serde_json::to_value(info(store.shares[0].clone(), "")).unwrap();
+        assert_eq!(json["views"], 2);
+        assert!(json["last_viewed_at"].is_string());
+    }
+
+    #[test]
+    fn delete_one_share() {
+        let mut store = ShareStore {
+            public_url: String::new(),
+            shares: vec![share("a", None), share("b", None)],
+        };
+        assert!(remove_share(&mut store, "a"));
+        assert!(!remove_share(&mut store, "a"));
+        assert_eq!(store.shares.len(), 1);
+        assert_eq!(store.shares[0].token, "b");
+    }
+
+    #[test]
+    fn delete_expired_shares() {
+        let now = Utc::now();
+        let mut store = ShareStore {
+            public_url: String::new(),
+            shares: vec![
+                share("a", Some(now - Duration::days(1))),
+                share("b", None),
+                share("c", Some(now + Duration::days(1))),
+                share("d", Some(now)),
+            ],
+        };
+        assert_eq!(remove_expired(&mut store, now), 2);
+        let left: Vec<_> = store.shares.iter().map(|s| s.token.as_str()).collect();
+        assert_eq!(left, ["b", "c"]);
+        assert_eq!(remove_expired(&mut store, now), 0);
+    }
+
+    async fn call(router: Router, method: &str, uri: &str) -> (StatusCode, String) {
+        let res = router
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = res.status();
+        let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        (status, String::from_utf8_lossy(&body).into_owned())
+    }
+
+    #[tokio::test]
+    async fn delete_api_routes() {
+        let state = AppState::new(crate::config::Config::default());
+        let api = || api_routes().with_state(state.clone());
+        // "expired" is its own route, not taken for a token
+        let (status, body) = call(api(), "DELETE", "/api/shares/expired").await;
+        assert_eq!(status, StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert!(json["removed"].is_u64());
+        let (status, _) = call(api(), "DELETE", &format!("/api/shares/{}", new_token())).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        // The public share port knows nothing of the API
+        let public = || public_router(state.clone());
+        let (status, _) = call(public(), "GET", "/api/shares").await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _) = call(public(), "DELETE", "/api/shares/expired").await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
     #[test]

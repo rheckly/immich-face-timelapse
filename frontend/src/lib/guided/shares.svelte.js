@@ -30,8 +30,11 @@ export async function loadShares() {
   shares.loaded = true;
 }
 
+const isExpired = (s) => !!s.expires_at && new Date(s.expires_at).getTime() <= Date.now();
+
+/** Active links of one video (expired ones are only in the overview). */
 export const sharesOf = (folder) =>
-  shares.list.filter((s) => s.folder === folder).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  shares.list.filter((s) => s.folder === folder && !isExpired(s)).sort((a, b) => b.created_at.localeCompare(a.created_at));
 
 export async function createShare(folder, title, days, download = false, photos = false) {
   const s = await call(API.shares, 'POST', { folder, title, days, download, photos });
@@ -53,6 +56,13 @@ export async function setShareDownload(token, change) {
 export async function revokeShare(token) {
   await call(`${API.shares}/${token}`, 'DELETE');
   shares.list = shares.list.filter((x) => x.token !== token);
+}
+
+/** Deletes all expired links; returns how many. */
+export async function deleteExpiredShares() {
+  const data = await call(`${API.shares}/expired`, 'DELETE');
+  shares.list = shares.list.filter((x) => !isExpired(x));
+  return data.removed;
 }
 
 export async function setPublicUrl(url) {

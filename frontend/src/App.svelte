@@ -243,7 +243,7 @@
 
 <main>
   <header>
-    <h1>Immich Face-Timelapse</h1>
+    <h1>Face-Timelapse</h1>
     <ConnectionStatus onchange={handleConnectionChange} />
   </header>
 

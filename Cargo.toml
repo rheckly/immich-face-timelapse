@@ -1,6 +1,6 @@
 [package]
 name = "immich-face-timelapse"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2021"
 description = "Immich Face-Timelapse: create face timelapses from Immich using face recognition and alignment"
 license = "MIT"
@@ -53,6 +53,12 @@ async-trait = "0.1"
 dotenvy = "0.15"
 unicode-normalization = "0.1"
 urlencoding = "2.1.3"
+
+# Login (signed session cookie, constant-time compare, random key)
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2.6"
+rand = "0.8"
 
 [dev-dependencies]
 tokio-test = "0.4"

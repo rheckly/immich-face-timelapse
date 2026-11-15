@@ -20,6 +20,8 @@
     starting = false,
     onstart,
     onresult,
+    openedResult = null, // folder of the timelapse opened from the history, its video already exists
+    stale = false, // settings changed since that video
     reviewOpen = false,
     onreview,
     onfinish,
@@ -185,6 +187,10 @@
   <p class="muted small">{t(config.processing.use_preview ? 'create.keepOriginalsPreview' : 'create.keepOriginalsHint')}</p>
 {/if}
 
+{#if openedResult}
+  <p class="muted mt">{stale ? t('create.openedStale') : t('create.opened')}</p>
+  <p class="mt"><button type="button" class:primary={!stale} onclick={onresult}>{t('create.viewExisting')} &gt;</button></p>
+{/if}
 {#if !busy}
   <p class="mt">
     <button type="button" class="primary" onclick={onstart} disabled={starting || !person}>

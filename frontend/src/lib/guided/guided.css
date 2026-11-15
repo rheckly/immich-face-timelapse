@@ -90,12 +90,18 @@
 }
 /* Like Mosaik: logo, title, then the path right after it; the rest sits on the right */
 .guided > header h1 { font-size: 18px; margin: 0; font-weight: bold; color: var(--text); }
+/* Logo and title link to the start (Mosaik decision 6) */
+.guided .brand { display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; border-radius: 5px; }
+.guided .brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .guided .logo { width: 30px; height: 30px; border-radius: 7px; display: block; }
+.guided .brandText { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.guided .tagline { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 640px) { .guided .tagline { display: none; } }
 /* Reused ConnectionStatus has a fixed dark pill: follow the theme here only */
 .guided > header .connection-status { background: var(--bg); border: 1px solid var(--line); color: var(--text); }
 .guided .themeBtn { width: 38px; height: 34px; padding: 0; font-size: 17px; line-height: 1; }
-.guided .langSwitch { display: flex; height: 34px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.guided .langSwitch button { border: 0; border-radius: 0; margin: 0; padding: 0 10px; background: var(--bg); color: inherit; font-size: 13px; }
+.guided .langSwitch { display: flex; height: 30px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.guided .langSwitch button { border: 0; border-radius: 0; margin: 0; padding: 0 9px; background: var(--bg); color: inherit; font-size: 13px; }
 .guided .langSwitch button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .guided .crumbs { flex: 1 1 160px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; font-size: 13px; }
 .guided .crumbs button { padding: 2px 6px; background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; }
@@ -107,7 +113,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: clamp(300px, 32vw, 380px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   padding: 16px 20px;
@@ -154,6 +160,8 @@
 .guided .boxHead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .guided .boxTitle { flex: 1; min-width: 0; margin: 0; font-size: 15px; }
 .guided .boxTitle.fixed { padding: 2px 0; font-weight: 600; }
+/* Step done (Mosaik decision 10, as in Reels) */
+.guided .boxTitle .tick { margin-left: 6px; color: var(--ok); }
 .guided .boxToggle {
   display: flex;
   width: 100%;
@@ -175,9 +183,10 @@
 .guided .paneBtn.on, .guided .settingOpen.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .guided .box.locked { opacity: 0.55; }
 .guided .kind h2 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
-.guided .seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.guided .seg button { flex: 1; border: 0; border-radius: 0; padding: 8px 12px; }
-.guided .seg button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+/* Segment switches: one shape for .seg and .toggles, as Mosaik .tabs (decision 12) */
+.guided .seg, .guided .toggles { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.guided .seg button, .guided .toggles button { flex: 1; margin: 0; border: 0; border-radius: 0; padding: 8px 12px; font-size: 15px; }
+.guided .seg button.on, .guided .toggles button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .guided .sumPerson { display: flex; gap: 10px; align-items: center; font-size: 14px; }
 .guided .pickedRow {
   display: flex;
@@ -192,9 +201,6 @@
 }
 .guided .pickedRow span { flex: 1; min-width: 0; }
 .guided .pickedRow button { padding: 0 7px; }
-.guided .toggles { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
-.guided .toggles button { flex: 1; border: 0; border-radius: 0; padding: 5px 8px; }
-.guided .toggles button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .guided .inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .guided .inline input[type='number'] { width: 70px; }
 
@@ -378,7 +384,7 @@
 .guided .panel > .srcList { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .guided .srcList > * { flex: none; }
 .guided .srcList > .srcTableWrap { flex: 1 1 auto; min-height: 160px; }
-.guided .srcTabs button { padding: 6px 10px; white-space: nowrap; }
+.guided .srcTabs button { white-space: nowrap; }
 .guided .srcTable th { padding: 0; z-index: 1; }
 .guided .srcTable th.num { text-align: right; }
 .guided .srcTable td { padding: 4px 8px; }

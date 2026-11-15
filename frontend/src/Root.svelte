@@ -4,6 +4,7 @@
   import App from './App.svelte';
   import GuidedApp from './lib/guided/GuidedApp.svelte';
   import VersionBadge from './lib/components/VersionBadge.svelte';
+  import ProfileButton from './lib/ProfileButton.svelte';
   import { STORAGE_KEYS } from './lib/constants.js';
 
   function loadView() {
@@ -38,6 +39,7 @@
       <button type="button" class="on" aria-pressed="true">Classic</button>
       <button type="button" aria-pressed="false" onclick={() => setView('guided')}>Guided</button>
     </div>
+    <ProfileButton />
   </nav>
   <App />
 {/if}

@@ -7,6 +7,7 @@
     toggle = false,
     closed = false,
     locked = false,
+    done = false, // step completed: tick after the title
     paneOpen = false,
     summary = '',
     ontoggle,
@@ -20,11 +21,11 @@
     {#if toggle}
       <h2 class="boxTitle">
         <button type="button" class="boxToggle" aria-expanded={!closed} onclick={ontoggle}>
-          <span>{title}</span><span class="boxArrow">▾</span>
+          <span>{title}{#if done && !locked}<span class="tick" aria-hidden="true">✓</span>{/if}</span><span class="boxArrow">▾</span>
         </button>
       </h2>
     {:else}
-      <h2 class="boxTitle fixed">{title}</h2>
+      <h2 class="boxTitle fixed">{title}{#if done && !locked}<span class="tick" aria-hidden="true">✓</span>{/if}</h2>
     {/if}
     {#if onopen}
       <button

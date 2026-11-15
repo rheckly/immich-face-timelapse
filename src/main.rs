@@ -91,7 +91,9 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("Share links served on http://{}", share_addr);
             let public = web::shares::public_router(state.clone());
             tokio::spawn(async move {
-                if let Err(e) = axum::serve(share_listener, public).await {
+                // Peer address: a view counts once per address (see web::shares)
+                let service = public.into_make_service_with_connect_info::<SocketAddr>();
+                if let Err(e) = axum::serve(share_listener, service).await {
                     tracing::warn!("Share listener stopped: {}", e);
                 }
             });
@@ -108,9 +110,13 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Starting server on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(state))
-        .await?;
+    // Peer address for the login's attempt limit (see web::auth::client_ip)
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal(state))
+    .await?;
 
     Ok(())
 }

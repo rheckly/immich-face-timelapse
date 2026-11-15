@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-timelapse.png">
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon-timelapse.png">
+<title>Face-Timelapse</title>
+<!--
+  Login page of Face-Timelapse (GET /login, see src/web/auth.rs). Same card as
+  Mosaik and Reels, only logo and name differ. Uses the app palette and follows
+  the app theme (Mosaik design template, chapter 1). Copied to dist/ as is
+  (Vite public folder).
+-->
+<script>
+  // Same theme as the app: own choice (sun/moon), else the system setting
+  (function () {
+    var choice = null;
+    try { choice = localStorage.getItem('immich-timelapse-theme'); } catch (e) { /* none */ }
+    var dark = choice === 'dark' || (choice !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  })();
+</script>
+<style>
+  :root { --bg: #f4f4f2; --card: #fff; --text: #23272b; --muted: #667; --line: #dcdcd8; --accent: #2f6f8f; --on-accent: #fff; --err: #a4262c; --shadow: rgba(0,0,0,.15); color-scheme: light; }
+  :root[data-theme=dark] { --bg: #17191b; --card: #222528; --text: #e8e8e6; --muted: #a0a4a8; --line: #3a3e42; --accent: #6db3d6; --on-accent: #111; --err: #ff8a8f; --shadow: rgba(0,0,0,.5); color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 40px 22px; }
+  main { background: var(--card); border-radius: 14px; padding: 32px 28px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 40px var(--shadow); }
+  h1 { font-size: 22px; margin: 0 0 6px; font-weight: 600; }
+  .kicker { color: var(--muted); font-size: 13px; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 4px; }
+  .tagline { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+
+  /* Word mark: brand/timelapse-logo.svg inline, in the accent of the theme */
+  .logo { height: 36px; display: flex; justify-content: center; align-items: center; margin-bottom: 18px; }
+  .logo svg { fill: var(--accent); }
+
+  /* Form */
+  form { text-align: left; margin-top: 8px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 5px; }
+  input[type=text], input[type=password] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; margin-bottom: 14px; outline: none; }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+  input.bad { border-color: var(--err); }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--text); margin: 2px 0 18px; }
+  .check input { accent-color: var(--accent); width: 16px; height: 16px; }
+  button { width: 100%; background: var(--accent); color: var(--on-accent); border: 0; border-radius: 8px; padding: 11px; font: 600 15px system-ui, sans-serif; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  .err { background: color-mix(in srgb, var(--err) 10%, transparent); border: 1px solid color-mix(in srgb, var(--err) 35%, transparent); color: var(--err); font-size: 14px; border-radius: 8px; padding: 8px 12px; margin: 0 0 14px; text-align: left; }
+  .err[hidden] { display: none; }
+  .foot { display: flex; justify-content: space-between; font-size: 12px; color: #777; margin-top: 18px; }
+  .foot a { color: #888; text-decoration: none; }
+  .foot a:hover { color: var(--text); }
+  button:focus-visible, .foot a:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo" aria-hidden="true"><svg viewBox="0 0 118 22" width="118" height="22"><rect width="16" height="22" rx="2" opacity=".2"/><rect x="20" width="16" height="22" rx="2" opacity=".4"/><rect x="40" width="16" height="22" rx="2" opacity=".6"/><rect x="60" width="16" height="22" rx="2" opacity=".8"/><rect x="80" width="16" height="22" rx="2"/><path d="M104 2 118 11 104 20z"/></svg></div>
+  <p class="kicker">Face-Timelapse</p>
+  <p class="tagline">Face timelapses from your Immich library</p>
+  <h1 data-t="title">Anmelden</h1>
+  <form id="form" novalidate>
+    <div class="err" id="block" role="alert" hidden></div>
+    <label for="user" data-t="user">Benutzername</label><input type="text" id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="pw" data-t="password">Passwort</label><input type="password" id="pw" name="password" autocomplete="current-password" required>
+    <div class="err" id="wrong" role="alert" hidden></div>
+    <label class="check"><input type="checkbox" id="remember" checked> <span data-t="remember">Angemeldet bleiben (30 Tage)</span></label>
+    <button type="submit" id="submit" data-t="submit">Anmelden</button>
+  </form>
+  <div class="foot"><span id="version"></span><a href="#" id="lang">English</a></div>
+</main>
+<script>
+  (function () {
+    var TEXTS = {
+      de: {
+        title: 'Anmelden', user: 'Benutzername', password: 'Passwort',
+        remember: 'Angemeldet bleiben (30 Tage)', submit: 'Anmelden',
+        other: 'English', version: 'Version',
+        wrong: 'Benutzername oder Passwort stimmt nicht.',
+        tooMany: function (n) { return 'Zu viele Versuche. Bitte in ' + n + (n === 1 ? ' Minute' : ' Minuten') + ' nochmals.'; },
+        failed: 'Die Anmeldung hat nicht geklappt. Bitte nochmals versuchen.'
+      },
+      en: {
+        title: 'Sign in', user: 'Username', password: 'Password',
+        remember: 'Stay signed in (30 days)', submit: 'Sign in',
+        other: 'Deutsch', version: 'Version',
+        wrong: 'Wrong username or password.',
+        tooMany: function (n) { return 'Too many attempts. Please try again in ' + n + (n === 1 ? ' minute.' : ' minutes.'); },
+        failed: 'Signing in did not work. Please try again.'
+      }
+    };
+    // Same key and rule as the app (STORAGE_KEYS.lang): own choice, else the browser
+    var lang;
+    try { lang = localStorage.getItem('lang'); } catch (e) { lang = null; }
+    if (!TEXTS[lang]) lang = String(navigator.language || 'en').toLowerCase().indexOf('de') === 0 ? 'de' : 'en';
+
+    var $ = function (id) { return document.getElementById(id); };
+    var version = '';
+    var shown = null; // { box, text(lang) } of the visible message
+
+    // Only a path on this server (no open redirect)
+    function nextPath() {
+      var n = new URLSearchParams(location.search).get('next') || '/';
+      return n.charAt(0) === '/' && n.charAt(1) !== '/' && n.charAt(1) !== '\\' ? n : '/';
+    }
+
+    function render() {
+      var tx = TEXTS[lang];
+      document.documentElement.lang = lang;
+      document.title = tx.title + ' · Face-Timelapse';
+      var nodes = document.querySelectorAll('[data-t]');
+      for (var i = 0; i < nodes.length; i++) nodes[i].textContent = tx[nodes[i].getAttribute('data-t')];
+      $('lang').textContent = tx.other;
+      $('version').textContent = version ? tx.version + ' ' + version : '';
+      if (shown) shown.box.textContent = shown.text(tx);
+    }
+
+    function show(box, text) {
+      hide();
+      shown = { box: box, text: text };
+      box.hidden = false;
+      render();
+    }
+
+    function hide() {
+      $('block').hidden = true;
+      $('wrong').hidden = true;
+      $('pw').classList.remove('bad');
+      shown = null;
+    }
+
+    $('lang').addEventListener('click', function (e) {
+      e.preventDefault();
+      lang = lang === 'de' ? 'en' : 'de';
+      try { localStorage.setItem('lang', lang); } catch (err) { /* not remembered */ }
+      render();
+    });
+
+    $('form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var btn = $('submit');
+      btn.disabled = true;
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username: $('user').value, password: $('pw').value, remember: $('remember').checked })
+      }).then(function (res) {
+        if (res.ok) { location.replace(nextPath()); return; }
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          btn.disabled = false;
+          if (res.status === 429) {
+            var n = Number(data.minutes) || 10;
+            show($('block'), function (tx) { return tx.tooMany(n); });
+          } else if (res.status === 401) {
+            show($('wrong'), function (tx) { return tx.wrong; });
+            $('pw').classList.add('bad');
+            $('pw').select();
+          } else {
+            show($('wrong'), function (tx) { return tx.failed; });
+          }
+        });
+      }).catch(function () {
+        btn.disabled = false;
+        show($('wrong'), function (tx) { return tx.failed; });
+      });
+    });
+
+    // Already signed in, or login off: straight on. Else show the version.
+    fetch('/api/auth/session', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        if (!s) return;
+        if (!s.enabled || s.user) { location.replace(nextPath()); return; }
+        version = String(s.version || '').replace(/^v/, '');
+        render();
+      })
+      .catch(function () {});
+
+    render();
+    $('user').focus();
+  })();
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import './guided.css';
   import AboutPane from './AboutPane.svelte';
+  import ProfileButton from '../ProfileButton.svelte';
   import ChangelogPane from './ChangelogPane.svelte';
   import SettingsPane from './SettingsPane.svelte';
   import PeriodPane from './PeriodPane.svelte';
@@ -28,7 +29,8 @@
   import CreatePane from './CreatePane.svelte';
   import ResultPane from './ResultPane.svelte';
   import SharePane from './SharePane.svelte';
-  import { loadShares } from './shares.svelte.js';
+  import SharesPane from './SharesPane.svelte';
+  import { loadShares, shares } from './shares.svelte.js';
   import HistoryPane from './HistoryPane.svelte';
   import HistoryDetail from './HistoryDetail.svelte';
   import ReviewPane from './ReviewPane.svelte';
@@ -50,7 +52,7 @@
     },
   }));
   const paneTitle = (k) =>
-    k === 'history' ? t('history.title') : k === 'about' ? t('about.title') : k === 'settings' ? t('settings.title') : (STEPS.find((s) => s.pane === k)?.label ?? '');
+    k === 'history' ? t('history.title') : k === 'shares' ? t('shares.title') : k === 'about' ? t('about.title') : k === 'settings' ? t('settings.title') : (STEPS.find((s) => s.pane === k)?.label ?? '');
   const pane2Title = (k) =>
     ({ adv: t('adv.title'), changelog: t('changelog.title'), music: t('music.title'), date: t('date.title'), pick: t('pick.title.' + titleWhich) })[k] ??
     FILTERS.find((f) => 'f:' + f.key === k)?.title ??
@@ -161,6 +163,12 @@
   function openPane2(key) {
     closeRightOf('pane');
     pane2 = pane2 === key ? null : key;
+  }
+  // From the link overview: the timelapse of a link in the history
+  function openFromShares(name) {
+    closeRightOf('left');
+    pane = 'history';
+    if (outputFolders.some((f) => f.name === name)) histDetail = name;
   }
   function openHistDetail(name) {
     const same = histDetail === name;
@@ -658,7 +666,21 @@
 
   // Take a timelapse from the history over: person, sources, period and settings.
   // Creating it again makes a new version; the old one stays.
-  function editFromRun(run) {
+  // What the video of an opened timelapse was made from; global settings
+  // (versions to keep, workers) do not change the video.
+  function editState() {
+    const skip = new Set(['keep_versions', 'max_workers']);
+    return JSON.stringify(
+      { p: person?.id ?? null, s: picked.map((x) => x.kind + ':' + x.id), dateFrom, dateTo, proc: config?.processing ?? null, video: config?.video ?? null },
+      (k, v) => (skip.has(k) ? undefined : v)
+    );
+  }
+  let editBase = $state(null); // editState() right after opening a timelapse to edit
+  let resultStale = $derived(!!historyFolder && editBase !== null && editState() !== editBase);
+
+  async function editFromRun(run) {
+    // Its video stays reachable in step 10 without creating it again
+    const opened = histInfo?.has_video ? histDetail : null;
     const src = run.source ?? {};
     const p = src.person?.id ? src.person : { id: run.person_id, name: run.person_name };
     if (p?.id) selectPerson(p);
@@ -674,13 +696,16 @@
       next.video = $state.snapshot(run.video);
       config = keepGlobal(next);
     }
-    historyFolder = null;
+    historyFolder = opened;
+    editBase = null;
     if (!busy && jobStatus !== JOB_STATUS.idle) {
       jobStatus = JOB_STATUS.idle;
       progress = { completed: 0, total: 0, message: '' };
     }
     closeRightOf('left');
     pane = 'create';
+    await tick();
+    if (opened && config) editBase = editState();
   }
 
   // Only the settings of an earlier run (filters, format, video, music, intro
@@ -742,7 +767,26 @@
   }
 
   // ---------- Texts for the boxes on the left ----------
+  let sharesSummary = $derived.by(() => {
+    // As in Mosaik: active links and their views
+    if (!shares.list.length) return t('shares.noneYet');
+    const active = shares.list.filter((s) => !s.expires_at || new Date(s.expires_at).getTime() > Date.now());
+    return t('shares.sum', { n: active.length, views: active.reduce((sum, s) => sum + (s.views ?? 0), 0) });
+  });
   let lock = $derived(!person);
+  // Tick after a step's title (Mosaik decision 10): the person is chosen; the
+  // settings steps hold valid values as soon as a person is chosen; "Create"
+  // once a video exists for the current settings.
+  let settingsDone = $derived(!!person && !!config);
+  let createDone = $derived(!!resultFolder && !resultStale && !jobActive);
+
+  // Logo link: plain click resets the view to the start instead of reloading
+  function goHome(e) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    closeRightOf('left');
+    document.querySelector('.guided .col')?.scrollTo({ top: 0 });
+  }
   let activeFilters = $derived(config ? FILTERS.filter((f) => config.processing[f.key].enabled) : []);
   let periodSummary = $derived.by(() => {
     const day = (d) => new Date(d + 'T00:00').toLocaleDateString(locale());
@@ -780,8 +824,15 @@
 
 <div class="guided">
   <header>
-    <img class="logo" src="/icon.png" alt="" />
-    <h1>{t('app.name')}</h1>
+    <!-- Logo and title link to the start: all panels closed (Mosaik decision 6) -->
+    <a class="brand" href="/" onclick={goHome}>
+      <img class="logo" src={dark ? '/brand/icon-timelapse-dark.svg' : '/brand/icon-timelapse-light.svg'} alt="" />
+      <span class="brandText">
+        <h1>{t('app.name')}</h1>
+        <!-- Family brand line, the same in every language (marken-uebersicht) -->
+        <span class="tagline">Face timelapses from your Immich library</span>
+      </span>
+    </a>
     <!-- Always there: it also pushes the controls to the right -->
     <nav class="crumbs" aria-label={t('crumb.path')}>
       {#if stack.length > 1}
@@ -806,6 +857,7 @@
       aria-label={dark ? t('theme.light') : t('theme.dark')}
       onclick={toggleTheme}>{dark ? '☀️' : '🌙'}</button
     >
+    <ProfileButton />
   </header>
 
   {#if !connected}
@@ -875,7 +927,7 @@
         </div>
 
         <div id="g-box-person">
-          <Box title={STEPS[0].label} paneOpen={pane === 'person'} onopen={() => openPane('person')}>
+          <Box title={STEPS[0].label} done={!!person} paneOpen={pane === 'person'} onopen={() => openPane('person')}>
             {#if person}
               <div class="sumPerson">
                 <span class="avatar sm">
@@ -897,6 +949,7 @@
             closed={closed.has('albums')}
             ontoggle={() => toggleBox('albums')}
             locked={lock}
+            done={settingsDone}
             paneOpen={pane === 'albums'}
             onopen={() => openPane('albums')}
             summary={picked.length === 0 ? t('albums.all') : picked.map(pickedText).join(', ')}
@@ -931,13 +984,13 @@
         </div>
 
         <div id="g-box-period">
-          <Box title={STEPS[2].label} locked={lock} paneOpen={pane === 'period'} onopen={() => openPane('period')}>
+          <Box title={STEPS[2].label} locked={lock} done={!!person} paneOpen={pane === 'period'} onopen={() => openPane('period')}>
             <p class:muted={lock}>{periodSummary}</p>
           </Box>
         </div>
 
         <div id="g-box-quality">
-          <Box title={STEPS[3].label} locked={lock || !config} paneOpen={pane === 'quality'} onopen={() => openPane('quality')}>
+          <Box title={STEPS[3].label} locked={lock || !config} done={settingsDone} paneOpen={pane === 'quality'} onopen={() => openPane('quality')}>
             {#if config}
               <p>{t('quality.active', { n: activeFilters.length, total: FILTERS.length })}</p>
               <p class="muted">{activeFilters.map((f) => f.title).join(', ') || t('quality.allUsed')}</p>
@@ -948,7 +1001,7 @@
         </div>
 
         <div id="g-box-format">
-          <Box title={STEPS[4].label} locked={lock || !config} paneOpen={pane === 'format'} onopen={() => openPane('format')}>
+          <Box title={STEPS[4].label} locked={lock || !config} done={settingsDone} paneOpen={pane === 'format'} onopen={() => openPane('format')}>
             {#if config}
               {@const p = config.processing}
               {@const [fw, fh] = frameSize(p.output)}
@@ -963,7 +1016,7 @@
         </div>
 
         <div id="g-box-video">
-          <Box title={STEPS[5].label} locked={lock || !config} paneOpen={pane === 'video'} onopen={() => openPane('video')}>
+          <Box title={STEPS[5].label} locked={lock || !config} done={settingsDone} paneOpen={pane === 'video'} onopen={() => openPane('video')}>
             {#if config}
               {@const v = config.video}
               <p class="muted">
@@ -982,7 +1035,7 @@
         </div>
 
         <div id="g-box-intro">
-          <Box title={STEPS[6].label} locked={lock || !config} paneOpen={pane === 'intro'} onopen={() => openPane('intro')}>
+          <Box title={STEPS[6].label} locked={lock || !config} done={settingsDone} paneOpen={pane === 'intro'} onopen={() => openPane('intro')}>
             {#if config}
               <TitleCardSummary card={config.video.intro} which="intro" />
             {:else}
@@ -992,7 +1045,7 @@
         </div>
 
         <div id="g-box-outro">
-          <Box title={STEPS[7].label} locked={lock || !config} paneOpen={pane === 'outro'} onopen={() => openPane('outro')}>
+          <Box title={STEPS[7].label} locked={lock || !config} done={settingsDone} paneOpen={pane === 'outro'} onopen={() => openPane('outro')}>
             {#if config}
               <TitleCardSummary card={config.video.outro} which="outro" />
             {:else}
@@ -1002,7 +1055,7 @@
         </div>
 
         <div id="g-box-create">
-          <Box title={STEPS[8].label} locked={lock && !jobActive} paneOpen={pane === 'create'} onopen={() => openPane('create')}>
+          <Box title={STEPS[8].label} locked={lock && !jobActive} done={createDone} paneOpen={pane === 'create'} onopen={() => openPane('create')}>
             {#if jobStatus === JOB_STATUS.cancelling}
               <p class="muted">{t('create.cancelling')}</p>
             {:else if busy}
@@ -1036,6 +1089,7 @@
                 {t('result.noneYet')}
               {:else if historyFolder}
                 {t('result.opened')} {resultFolder}
+                {#if resultStale}<br /><em>{t('result.staleShort')}</em>{/if}
               {:else}
                 {t('result.finished')} {resultFolder}
               {/if}
@@ -1046,6 +1100,12 @@
         <div id="g-box-settings">
           <Box title={t('settings.title')} paneOpen={pane === 'settings'} onopen={() => openPane('settings')}>
             <p class="muted">{t('settings.sum')}</p>
+          </Box>
+        </div>
+
+        <div id="g-box-shares">
+          <Box title={t('shares.title')} paneOpen={pane === 'shares'} onopen={() => openPane('shares')}>
+            <p class="muted">{sharesSummary}</p>
           </Box>
         </div>
 
@@ -1063,6 +1123,8 @@
             <AboutPane {immich} onretry={checkConnection} changelogOpen={pane2 === 'changelog'} onchangelog={() => openPane2('changelog')} />
           {:else if pane === 'settings'}
             {#if config}<SettingsPane bind:config />{:else}<p class="muted">{t('common.loading')}</p>{/if}
+          {:else if pane === 'shares'}
+            <SharesPane folders={outputFolders} onopen={openFromShares} />
           {:else if pane === 'history'}
             <HistoryPane
               folders={outputFolders}
@@ -1125,6 +1187,8 @@
               {starting}
               onstart={startProcessing}
               onresult={() => goStep(9)}
+              openedResult={historyFolder && !busy && jobStatus === JOB_STATUS.idle ? historyFolder : null}
+              stale={resultStale}
               {reviewOpen}
               onreview={toggleReview}
               onfinish={finishVideo}
@@ -1132,7 +1196,7 @@
               {pickSel}
             />
           {:else if pane === 'result' && resultFolder}
-            <ResultPane folderName={resultFolder} folder={resultInfo} stamp={resultStamp} photosOpen={right} onphotos={togglePhotos} {shareOpen} onshare={toggleShare} />
+            <ResultPane folderName={resultFolder} folder={resultInfo} stamp={resultStamp} photosOpen={right} onphotos={togglePhotos} {shareOpen} onshare={toggleShare} stale={resultStale} onrecreate={() => openPane('create')} />
           {:else}
             <p class="muted">{t('common.loading')}</p>
           {/if}

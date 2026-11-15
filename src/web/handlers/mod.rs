@@ -24,6 +24,7 @@ mod sources;
 mod titles;
 mod ws;
 
+use crate::web::auth;
 use crate::web::state::AppState;
 use axum::{
     extract::{DefaultBodyLimit, Request},
@@ -75,8 +76,17 @@ pub struct StartResponse {
     pub message: String,
 }
 
-/// Create the router with all routes.
+/// Create the router with all routes. The optional login (LOGIN_USER /
+/// LOGIN_PASSWORD) keeps its signing key next to config.toml.
 pub fn create_router(state: AppState) -> Router {
+    let config_dir = std::path::Path::new(crate::config::CONFIG_PATH)
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    create_router_with_auth(state, auth::Auth::from_env(config_dir))
+}
+
+/// Create the router with a given login state (tests, or login off).
+pub fn create_router_with_auth(state: AppState, auth: std::sync::Arc<auth::Auth>) -> Router {
     // Get output directory from config for serving results
     let output_dir = state
         .config
@@ -167,8 +177,12 @@ pub fn create_router(state: AppState) -> Router {
         )
         // Serve frontend static files (fallback to index.html for SPA routing)
         .fallback_service(ServeDir::new("frontend/dist").fallback(get(serve_index)))
-        .layer(middleware::from_fn(same_origin_only))
         .with_state(state)
+        // Login page, its icon and the login API (see web::auth)
+        .merge(auth::routes(auth.clone()))
+        // Login first in the chain, then the origin check (it wraps the login)
+        .layer(middleware::from_fn_with_state(auth, auth::require_login))
+        .layer(middleware::from_fn(same_origin_only))
 }
 
 /// Refuse changing requests and WebSocket connections from another web page.

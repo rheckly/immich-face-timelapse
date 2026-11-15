@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Immich Face-Timelapse</title>
+    <title>Face-Timelapse</title>
     <script>
       // Set the theme before the page renders, so it does not flash. Used by the guided view.
       // Without an own choice, the system setting counts (like Mosaik).
@@ -13,9 +13,19 @@
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       })();
     </script>
-    <!-- Tab icon (64x64); the header of the guided view shows icon.png -->
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/icon.png" />
+    <!-- Brand files from Mosaik docs/brand (design template, chapter 8). /favicon.svg
+         follows the system theme; the PNGs are the fallback. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-timelapse.png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon-timelapse.png" />
+    <!-- Link preview of the app (share pages show their own video instead) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Face-Timelapse" />
+    <meta property="og:description" content="Face timelapses from your Immich library" />
+    <meta property="og:image" content="/brand/og-timelapse.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="app"></div>

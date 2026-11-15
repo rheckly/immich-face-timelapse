@@ -94,6 +94,10 @@ Store the key in a `.env` file next to your `docker-compose.yml` rather than in 
 
 ```env
 IMMICH_API_KEY=your-api-key
+# Optional, but recommended: login for the web interface (see "Login")
+LOGIN_USER=admin
+LOGIN_PASSWORD=choose-a-long-password
+LOGIN_NAME=Your Name
 ```
 
 ### 2. Docker Compose (recommended)
@@ -110,6 +114,10 @@ services:
     environment:
       - IMMICH_API_KEY=${IMMICH_API_KEY}
       - IMMICH_BASE_URL=http://your-immich-host:2283
+      # optional login (see "Login"); without LOGIN_PASSWORD there is none
+      - LOGIN_USER=${LOGIN_USER:-admin}
+      - LOGIN_PASSWORD=${LOGIN_PASSWORD:-}
+      - LOGIN_NAME=${LOGIN_NAME:-}
     volumes:
       - ./config:/app/config
       - ./output:/app/output
@@ -123,7 +131,8 @@ Set the folder permissions before the first start:
 mkdir -p config output music && chown -R 1000:1000 config output music
 ```
 
-Then open **http://your-server:5000**.
+Then open **http://your-server:5000**. With `LOGIN_PASSWORD` set, you first see the login page; sign in with
+`LOGIN_USER` and `LOGIN_PASSWORD`.
 
 Processing is CPU-heavy. The app doesn't need to run all the time, so you can also run it on a faster PC
 just for creating timelapses.
@@ -161,6 +170,9 @@ e.g. `"5002:5000"`, if the original already uses 5000.
 | `CONNECT_KEY` | no | Connect key of Immich Smart Albums (sent as `X-Connect-Key`) |
 | `UMAMI_URL` | no | Umami server (or its tracker script URL) for usage statistics |
 | `UMAMI_WEBSITE_ID` | no | Umami website ID; statistics are off unless both Umami variables are set |
+| `LOGIN_USER` | no | User name of the login (default `admin`) |
+| `LOGIN_PASSWORD` | no | Password of the login; turns the login on. Without it the web interface is open as before |
+| `LOGIN_NAME` | no | Display name in the profile menu, e.g. `Jane Doe` (initials `JD`); default is the user name |
 
 All optional features are simply hidden or off when their variables are missing.
 
@@ -168,7 +180,7 @@ All optional features are simply hidden or off when their variables are missing.
 
 | Path | Description |
 |---|---|
-| `/app/config` | Settings (`config.toml`), shared links (`shares.json`), uploaded title images, extra fonts in `config/fonts` |
+| `/app/config` | Settings (`config.toml`), shared links (`shares.json`), signing key of the login (`.session-key`), uploaded title images, extra fonts in `config/fonts` |
 | `/app/output` | One folder per run (`<name>_<YYYY-MM-DD_HHMM>`) with video, frames and `run.json` |
 | `/app/music` | *(optional)* Music files (mp3, m4a, aac, wav, flac, ogg, opus); read-only is fine if you don't upload music in the UI |
 
@@ -202,7 +214,67 @@ To share with people outside your network:
 1. publish port 5001 (and only this port) through your reverse proxy, e.g. as `https://share.example.com`,
 2. enter this address as **public address** under **Settings** in the app.
 
-Never expose port 5000: the web interface has no login of its own.
+Share links never need a login. Protect the web interface on port 5000 with the login (see below) and keep it
+inside your network or behind your reverse proxy's access control; never publish it like port 5001.
+
+The box **Shared timelapses** (below Settings) lists all links with their validity and views, and lets you copy,
+open, extend or delete them; deleted and expired links only show a "link not valid" page. A view is counted when
+someone opens the share page: video streaming, the poster image, HEAD requests, bots and link previews (WhatsApp,
+Slack, Telegram, Facebook, Discord and the like) do not count, and the same address counts only once per 30 minutes.
+Only the number and the time of the last view are stored, no IP addresses or browser details.
+
+### Login
+
+The web interface has an optional login with **one user**. It is off until you set a password: without
+`LOGIN_PASSWORD` everyone who reaches port 5000 can use the app, as in earlier versions.
+
+**Set up the user (new or existing installation)**
+
+1. Add the login to the `.env` file next to your `docker-compose.yml` (keep it out of the compose file and out of
+   any Git repository):
+
+   ```env
+   LOGIN_USER=admin
+   LOGIN_PASSWORD=choose-a-long-password
+   LOGIN_NAME=Your Name
+   ```
+
+   `LOGIN_USER` defaults to `admin`. `LOGIN_NAME` is only shown in the profile menu; its initials are on the round
+   profile button at the top right. A long random password is best, e.g. from `openssl rand -base64 24`.
+   Docker Compose treats `$` in `.env` values as a variable; write `$$` for a literal `$`, or avoid it.
+2. Pass the variables to the container, as in the compose example above (`LOGIN_USER`, `LOGIN_PASSWORD`,
+   `LOGIN_NAME` under `environment`). With `docker run`, add `-e LOGIN_USER=… -e LOGIN_PASSWORD=… -e LOGIN_NAME=…`.
+   In Portainer, Dockhand and similar tools, set them as stack variables.
+3. Recreate the container so it reads the new values: `docker compose up -d`. A plain restart does not pick up
+   changed variables.
+4. Open the app; it now shows the login page. The log says `Login on for user '…'`.
+
+On the first start with a password, the app creates a random signing key in `/app/config/.session-key`
+(readable only by the container user). Nothing else needs to be set up, and existing settings, runs and share links
+stay as they are.
+
+**Change the password or the user name:** change `LOGIN_PASSWORD` or `LOGIN_USER` in `.env` and recreate the
+container. All browsers are signed out at once, because sessions are bound to user and password.
+
+**Forgotten password:** there is no reset by e-mail. Whoever runs the container sets a new `LOGIN_PASSWORD` as
+above.
+
+**Sign out everywhere** without changing the password: delete `/app/config/.session-key` and restart the
+container; a new key is created.
+
+**Turn the login off:** remove `LOGIN_PASSWORD` (or leave it empty) and recreate the container.
+
+How it works:
+
+- **Stay signed in** keeps the session for 30 days; without it, the session ends when the browser is closed.
+- After **5 wrong attempts within 10 minutes** from the same address, the login is locked for that address for the
+  rest of the 10 minutes.
+- Sign out with the profile button at the top right → **Sign out**.
+- The session is a signed cookie (`HttpOnly`, `SameSite=Lax`). Behind an HTTPS reverse proxy that sends
+  `X-Forwarded-Proto: https`, the cookie is also `Secure`. Use HTTPS whenever the interface is reachable from
+  outside your home network, otherwise the password travels in plain text.
+- Behind a reverse proxy in your network, the address for the lock comes from `X-Forwarded-For`.
+- Not behind the login: the health check (`/api/health`), the login page, and the share links on port 5001.
 
 ### Quality settings
 

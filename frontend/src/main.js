@@ -1,6 +1,10 @@
 import { mount } from 'svelte';
 import './styles/global.css';
 import Root from './Root.svelte';
+import { installAuthRedirect } from './lib/auth.js';
+
+// With a login on the server, a 401 leads to the login page
+installAuthRedirect();
 
 // Optional Umami statistics: on when the server has UMAMI_URL and UMAMI_WEBSITE_ID
 fetch('/api/analytics')
