@@ -738,7 +738,8 @@ mod tests {
 
     #[tokio::test]
     async fn session_has_display_name() {
-        let named = Login::new("roger", "secret", [7u8; 32]).with_name(Some(" Roger Heckly ".into()));
+        let named =
+            Login::new("roger", "secret", [7u8; 32]).with_name(Some(" Roger Heckly ".into()));
         let token = named.token(now() + 60);
         let app = app(Auth::new(Some(named)));
         let cookie = format!("{}={}", COOKIE_NAME, token);

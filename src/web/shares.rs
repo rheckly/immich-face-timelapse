@@ -414,16 +414,36 @@ async fn delete_expired() -> Result<Json<serde_json::Value>, (StatusCode, String
 const VIEW_WINDOW: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 /// Last counted open per (token, address); only in memory.
-static RECENT_VIEWS: std::sync::Mutex<Option<std::collections::HashMap<(String, IpAddr), Instant>>> =
-    std::sync::Mutex::new(None);
+static RECENT_VIEWS: std::sync::Mutex<
+    Option<std::collections::HashMap<(String, IpAddr), Instant>>,
+> = std::sync::Mutex::new(None);
 
 /// User agents of bots, crawlers and link previews (messengers, social networks).
 fn is_bot(user_agent: &str) -> bool {
     const MARKERS: &[&str] = &[
-        "bot", "crawler", "spider", "preview", "whatsapp", "slack", "telegram",
-        "facebookexternalhit", "facebookcatalog", "discord", "skype", "linkedin",
-        "pinterest", "embedly", "vkshare", "quora link", "outbrain", "headless",
-        "lighthouse", "curl", "wget", "python-requests", "go-http-client",
+        "bot",
+        "crawler",
+        "spider",
+        "preview",
+        "whatsapp",
+        "slack",
+        "telegram",
+        "facebookexternalhit",
+        "facebookcatalog",
+        "discord",
+        "skype",
+        "linkedin",
+        "pinterest",
+        "embedly",
+        "vkshare",
+        "quora link",
+        "outbrain",
+        "headless",
+        "lighthouse",
+        "curl",
+        "wget",
+        "python-requests",
+        "go-http-client",
     ];
     let ua = user_agent.to_ascii_lowercase();
     ua.trim().is_empty() || MARKERS.iter().any(|m| ua.contains(m))
@@ -478,7 +498,12 @@ async fn record_view(token: &str, method: &Method, headers: &HeaderMap, peer: Op
     let ip = crate::web::auth::client_ip(peer, headers);
     let first = {
         let mut guard = RECENT_VIEWS.lock().unwrap_or_else(|e| e.into_inner());
-        first_view(guard.get_or_insert_with(Default::default), token, ip, Instant::now())
+        first_view(
+            guard.get_or_insert_with(Default::default),
+            token,
+            ip,
+            Instant::now(),
+        )
     };
     if !first {
         return;
@@ -1089,7 +1114,8 @@ mod tests {
             h.insert(header::USER_AGENT, HeaderValue::from_static(v));
             h
         };
-        let firefox = ua("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0");
+        let firefox =
+            ua("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0");
         let iphone = ua("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148");
         assert!(counts_as_view(&Method::GET, &firefox));
         assert!(counts_as_view(&Method::GET, &iphone));
@@ -1117,13 +1143,38 @@ mod tests {
         let a = IpAddr::from([10, 0, 0, 1]);
         let b = IpAddr::from([10, 0, 0, 2]);
         assert!(first_view(&mut recent, "x", a, t0));
-        assert!(!first_view(&mut recent, "x", a, t0 + std::time::Duration::from_secs(60)));
-        assert!(!first_view(&mut recent, "x", a, t0 + std::time::Duration::from_secs(29 * 60)));
+        assert!(!first_view(
+            &mut recent,
+            "x",
+            a,
+            t0 + std::time::Duration::from_secs(60)
+        ));
+        assert!(!first_view(
+            &mut recent,
+            "x",
+            a,
+            t0 + std::time::Duration::from_secs(29 * 60)
+        ));
         // Another address, or another link from the same address, counts
-        assert!(first_view(&mut recent, "x", b, t0 + std::time::Duration::from_secs(60)));
-        assert!(first_view(&mut recent, "y", a, t0 + std::time::Duration::from_secs(60)));
+        assert!(first_view(
+            &mut recent,
+            "x",
+            b,
+            t0 + std::time::Duration::from_secs(60)
+        ));
+        assert!(first_view(
+            &mut recent,
+            "y",
+            a,
+            t0 + std::time::Duration::from_secs(60)
+        ));
         // After 30 minutes it counts again
-        assert!(first_view(&mut recent, "x", a, t0 + std::time::Duration::from_secs(30 * 60)));
+        assert!(first_view(
+            &mut recent,
+            "x",
+            a,
+            t0 + std::time::Duration::from_secs(30 * 60)
+        ));
     }
 
     #[test]
